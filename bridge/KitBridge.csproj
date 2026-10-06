@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>KitBridge</RootNamespace>
+    <AssemblyName>kit-bridge</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Full Swing LM Connect SDK (LGPL-3.0). Requires an AccountId/AccountKey from Full Swing Golf. -->
+    <PackageReference Include="FullSwingGolf.LaunchMonitor" Version="1.9.1" />
+  </ItemGroup>
+</Project>

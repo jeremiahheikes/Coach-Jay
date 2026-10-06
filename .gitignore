@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# app
+bridge/appsettings.json
+bridge/bin/
+bridge/obj/
+bridge/queue.jsonl
