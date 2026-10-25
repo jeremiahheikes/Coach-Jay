@@ -5,7 +5,8 @@ import type { Video } from "@/lib/types";
 import { fmtDate } from "@/lib/types";
 
 /** Grid of videos; tapping one opens an inline player with a signed URL fetched on demand. */
-export function VideoGrid({ videos, emptyText, extra }: { videos: Video[]; emptyText: string; extra?: (v: Video) => React.ReactNode }) {
+/** `extra` maps video id → element rendered under the tile (a map, not a function, so Server Components can pass it). */
+export function VideoGrid({ videos, emptyText, extra }: { videos: Video[]; emptyText: string; extra?: Record<string, React.ReactNode> }) {
   const [open, setOpen] = useState<Video | null>(null);
   if (videos.length === 0) return <p className="text-sm text-ink3">{emptyText}</p>;
   return (
@@ -26,7 +27,7 @@ export function VideoGrid({ videos, emptyText, extra }: { videos: Video[]; empty
                 <span className="block text-xs text-ink3">{v.kind === "lesson" ? v.description : fmtDate(v.recorded_on)}</span>
               </div>
             </button>
-            {extra && <div className="px-3 pb-2.5">{extra(v)}</div>}
+            {extra?.[v.id] && <div className="px-3 pb-2.5">{extra[v.id]}</div>}
           </div>
         ))}
       </div>

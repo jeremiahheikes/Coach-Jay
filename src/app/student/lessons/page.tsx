@@ -15,7 +15,7 @@ export default async function LessonsPage() {
       <PageHeader title="Lessons" eyebrow={`${todo.length} to watch · ${done.length} done`} />
       <section className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold">To watch</h3>
-        <VideoGrid videos={todo.map((a) => a.video)} emptyText="All caught up." extra={(v) => <MarkWatched assignmentId={todo.find((a) => a.video_id === v.id)!.id} />} />
+        <VideoGrid videos={todo.map((a) => a.video)} emptyText="All caught up." extra={Object.fromEntries(todo.map((a) => [a.video_id, <MarkWatched key={a.id} assignmentId={a.id} />]))} />
       </section>
       {done.length > 0 && (
         <section className="flex flex-col gap-2">

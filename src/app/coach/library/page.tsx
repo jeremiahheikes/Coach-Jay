@@ -19,7 +19,7 @@ export default async function LibraryPage() {
       {cats.map((c) => (
         <section key={c} className="flex flex-col gap-2">
           <h3 className="text-lg font-semibold">{c}</h3>
-          <VideoGrid videos={lessons.filter((l) => (l.category || "Uncategorized") === c)} emptyText="" extra={(v) => <span className="text-xs text-ink3">Assigned to {assignedCount.get(v.id) ?? 0}</span>} />
+          <VideoGrid videos={lessons.filter((l) => (l.category || "Uncategorized") === c)} emptyText="" extra={Object.fromEntries(lessons.map((l) => [l.id, <span key={l.id} className="text-xs text-ink3">Assigned to {assignedCount.get(l.id) ?? 0}</span>]))} />
         </section>
       ))}
     </>

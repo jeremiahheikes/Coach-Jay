@@ -105,7 +105,7 @@ async function LessonsTab({ studentId, first, assigned, assignedIds }: { student
     <>
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between"><h3 className="text-lg font-semibold">Assigned to {first}</h3><span className="eyebrow">{assigned.length} lessons</span></div>
-        <VideoGrid videos={assigned} emptyText="Nothing assigned yet." extra={(v) => <AssignButtons videoId={v.id} studentId={studentId} assigned />} />
+        <VideoGrid videos={assigned} emptyText="Nothing assigned yet." extra={Object.fromEntries(assigned.map((v) => [v.id, <AssignButtons key={v.id} videoId={v.id} studentId={studentId} assigned />]))} />
       </section>
       <section className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold">Assign from library</h3>
