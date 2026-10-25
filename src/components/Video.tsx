@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { ReviewPlayer } from "./ReviewPlayer";
 import type { Video } from "@/lib/types";
 import { fmtDate } from "@/lib/types";
 
@@ -9,7 +10,7 @@ export function VideoGrid({ videos, emptyText, extra }: { videos: Video[]; empty
   if (videos.length === 0) return <p className="text-sm text-ink3">{emptyText}</p>;
   return (
     <div className="flex flex-col gap-4">
-      {open && <Player video={open} onClose={() => setOpen(null)} />}
+      {open && <ReviewPlayer video={open} key={open.id} onClose={() => setOpen(null)}>{open.kind === "lesson" && open.description ? <p className="text-ink2 text-sm m-0">{open.description}</p> : open.kind === "swing" && open.coach_note ? <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{open.coach_note}</div> : null}</ReviewPlayer>}
       <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
         {videos.map((v) => (
           <div key={v.id} className={`card !p-0 overflow-hidden flex flex-col ${open?.id === v.id ? "border-accent" : ""}`}>
@@ -28,45 +29,6 @@ export function VideoGrid({ videos, emptyText, extra }: { videos: Video[]; empty
             {extra && <div className="px-3 pb-2.5">{extra(v)}</div>}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-export function Player({ video, onClose }: { video: Video; onClose?: () => void }) {
-  // Keyed by video id so switching videos shows "Loading…" without a synchronous reset.
-  const [loaded, setLoaded] = useState<{ id: string; src: string | null; err: string | null } | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/video?id=${video.id}`).then(async (r) => {
-      if (!alive) return;
-      if (!r.ok) { setLoaded({ id: video.id, src: null, err: "Couldn't load this video." }); return; }
-      const j = await r.json();
-      setLoaded({ id: video.id, src: j.url, err: null });
-    }).catch(() => alive && setLoaded({ id: video.id, src: null, err: "Couldn't load this video." }));
-    return () => { alive = false; };
-  }, [video.id]);
-  const src = loaded?.id === video.id ? loaded.src : null;
-  const err = loaded?.id === video.id ? loaded.err : null;
-  return (
-    <div className="card !p-0 overflow-hidden">
-      <div className="aspect-video bg-black grid place-items-center text-white/70 text-sm">
-        {src ? <video src={src} controls playsInline className="w-full h-full" /> : err ?? "Loading…"}
-      </div>
-      <div className="p-3.5 flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-lg font-semibold">{video.title}</h3>
-          <div className="flex items-center gap-3">
-            {video.kind === "swing" && <span className="eyebrow">{fmtDate(video.recorded_on)}</span>}
-            {onClose && <button onClick={onClose} className="text-sm text-ink3 hover:text-ink">Close</button>}
-          </div>
-        </div>
-        {video.kind === "lesson" && video.description && <p className="text-ink2 text-sm m-0">{video.description}</p>}
-        {video.kind === "swing" && video.coach_note && (
-          <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm">
-            <div className="eyebrow mb-0.5">Coach note</div>{video.coach_note}
-          </div>
-        )}
       </div>
     </div>
   );

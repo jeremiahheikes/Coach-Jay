@@ -107,6 +107,13 @@ export async function registerVideo(input: { kind: "swing" | "lesson"; student_i
   return { ok: true };
 }
 
+export async function updateVideoNote(video_id: string, coach_note: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("videos").update({ coach_note }).eq("id", video_id).select("student_id").single();
+  if (data?.student_id) revalidatePath(`/coach/students/${data.student_id}`);
+  return error ? { error: error.message } : { ok: true };
+}
+
 export async function assignLesson(video_id: string, student_id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("assignments").upsert({ video_id, student_id }, { onConflict: "video_id,student_id" });

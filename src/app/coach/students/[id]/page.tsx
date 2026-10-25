@@ -5,7 +5,7 @@ import { BallData } from "@/components/BallData";
 import { TrendChart } from "@/components/Stats";
 import { VideoGrid } from "@/components/Video";
 import { carryTrend, getStudent, getStudentBundle, listLessons } from "@/lib/data";
-import { fmtDate, fmtDateTime, initials, SOURCE_LABEL } from "@/lib/types";
+import { fmtDate, fmtDateTime, SOURCE_LABEL } from "@/lib/types";
 import { AssignButtons, EditStudent, SwingUpload } from "./panels";
 
 const TABS = [["progress", "Progress"], ["data", "Ball data"], ["swings", "Swing videos"], ["lessons", "Assigned lessons"]] as const;
@@ -23,7 +23,7 @@ export default async function StudentPage(props: PageProps<"/coach/students/[id]
   return (
     <>
       <PageHeader title={student.full_name} eyebrow={`Next lesson · ${fmtDateTime(student.next_lesson_at)}`} back="/coach"
-        action={<span className="avatar w-12 h-12 text-lg">{initials(student.full_name)}</span>} />
+        action={<Link href={`/coach/students/${id}/session`} className="btn btn-sm btn-primary whitespace-nowrap">● Live session</Link>} />
       <nav className="tabs">
         {TABS.map(([k, l]) => <Link key={k} href={`/coach/students/${id}?tab=${k}`} aria-current={k === tab ? "page" : undefined}>{l}</Link>)}
       </nav>
@@ -78,7 +78,10 @@ export default async function StudentPage(props: PageProps<"/coach/students/[id]
 
       {tab === "swings" && (
         <>
-          <SwingUpload studentId={id} />
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/coach/students/${id}/session`} className="btn btn-primary">● Start live session</Link>
+            <SwingUpload studentId={id} />
+          </div>
           <section className="flex flex-col gap-2">
             <h3 className="text-lg font-semibold">{swings.length} swing video{swings.length === 1 ? "" : "s"}</h3>
             <VideoGrid videos={swings} emptyText="No swing videos yet. Upload one from the lesson above." />
