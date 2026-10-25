@@ -15,6 +15,7 @@ assign video lessons; students open it on their phone (installable, no App Store
 | Ball data | Per-club averages, metric trend chart, session table | Same view, read-only |
 | Ball data in | **Manual** form · **KIT bridge** (live, shot-by-shot) · **Bay CSV import** | — |
 | Swing video | Upload from the lesson (phone camera works), add a coach note | Watch with the note |
+| Live session | **● Live session** on a student: record or pick a clip, it opens in slow-mo review (0.1×–1×, frame step, A/B loop); today's clips in a strip, earlier swings to compare | Reviews the same clips in slow motion |
 | Lessons | Upload to a library by category; assign to students | Watch assigned lessons, mark watched |
 
 Deliberately not in v1: booking, payments, chat, swing-video drawing tools.
