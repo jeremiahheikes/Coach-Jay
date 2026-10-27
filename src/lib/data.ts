@@ -51,6 +51,25 @@ export async function getSessionShots(sessionId: string): Promise<Shot[]> {
   return (data ?? []) as Shot[];
 }
 
+/** The student's lesson in progress (an open session), if any. */
+export async function getOpenLesson(studentId: string): Promise<Session | null> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("sessions").select("*").eq("student_id", studentId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return (data as Session) ?? null;
+}
+
+/** Everything the lesson page needs: the session, its clips and its shots. */
+export async function getLessonDetail(sessionId: string) {
+  const { supabase } = await requireUser();
+  const [session, clips, shots] = await Promise.all([
+    supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
+    supabase.from("videos").select("*").eq("session_id", sessionId).order("created_at", { ascending: false }),
+    supabase.from("shots").select("*").eq("session_id", sessionId).order("hit_at"),
+  ]);
+  if (!session.data) return null;
+  return { session: session.data as Session, clips: (clips.data ?? []) as Video[], shots: (shots.data ?? []) as Shot[] };
+}
+
 export async function listLessons(): Promise<Video[]> {
   const { supabase } = await requireUser();
   const { data } = await supabase.from("videos").select("*").eq("kind", "lesson").order("category").order("created_at", { ascending: false });

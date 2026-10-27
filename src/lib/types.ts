@@ -20,6 +20,7 @@ export type Student = {
 export type Session = {
   id: string; student_id: string; coach_id: string; session_date: string;
   source: SessionSource; title: string; note: string; created_at: string;
+  status: "open" | "closed"; closed_at: string | null;
 };
 
 export type Shot = {
@@ -42,6 +43,7 @@ export type Video = {
   id: string; kind: "swing" | "lesson"; coach_id: string; student_id: string | null;
   storage_path: string; title: string; category: string; description: string;
   coach_note: string; recorded_on: string; duration_seconds: number | null; created_at: string;
+  session_id: string | null;
 };
 
 export type Assignment = { id: string; video_id: string; student_id: string; assigned_at: string; watched_at: string | null };

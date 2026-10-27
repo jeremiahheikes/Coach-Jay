@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createHash, randomBytes } from "node:crypto";
 import { parseCsv } from "@/lib/csv";
+import { lessonTitle } from "@/lib/lesson";
 
 export type ActionState = { error?: string; ok?: boolean; token?: string };
 
@@ -38,6 +39,40 @@ export async function updateStudent(_: ActionState, form: FormData): Promise<Act
   return { ok: true };
 }
 
+// ---------- Lessons in progress ----------
+/** Opens a lesson for the student (or resumes the one already open) and goes to its page. */
+export async function startLesson(form: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const student_id = str(form, "student_id");
+  const { data: open } = await supabase.from("sessions").select("id").eq("student_id", student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!open) {
+    const { error } = await supabase.from("sessions").insert({
+      student_id, coach_id: user.id, session_date: new Date().toISOString().slice(0, 10), source: "manual", title: "Lesson", status: "open",
+    });
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath(`/coach/students/${student_id}`);
+  redirect(`/coach/students/${student_id}/session`);
+}
+
+/** Closes the lesson with a summary note; it then shows in the lesson log like any session. */
+export async function finishLesson(_: ActionState, form: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  const session_id = str(form, "session_id"), student_id = str(form, "student_id");
+  const [{ count: clips }, { count: shots }] = await Promise.all([
+    supabase.from("videos").select("id", { count: "exact", head: true }).eq("session_id", session_id),
+    supabase.from("shots").select("id", { count: "exact", head: true }).eq("session_id", session_id),
+  ]);
+  const { error } = await supabase.from("sessions").update({
+    status: "closed", closed_at: new Date().toISOString(), note: str(form, "note"), title: lessonTitle(clips ?? 0, shots ?? 0),
+  }).eq("id", session_id).eq("status", "open");
+  if (error) return { error: error.message };
+  revalidatePath(`/coach/students/${student_id}`);
+  redirect(`/coach/students/${student_id}`);
+}
+
 // ---------- Manual ball-data session ----------
 export async function logSession(_: ActionState, form: FormData): Promise<ActionState> {
   const supabase = await createClient();
@@ -50,17 +85,23 @@ export async function logSession(_: ActionState, form: FormData): Promise<Action
   if ([club_speed, ball_speed, launch_angle, spin_rate, carry].some((v) => v == null)) return { error: "Fill in all five numbers." };
   const smash_factor = club_speed! > 0 ? +(ball_speed! / club_speed!).toFixed(2) : null;
 
-  const { data: session, error } = await supabase.from("sessions").insert({
-    student_id, coach_id: user.id, session_date: str(form, "session_date") || new Date().toISOString().slice(0, 10),
-    source: "manual", title: `${club} session`, note: str(form, "note"),
-  }).select("id").single();
-  if (error) return { error: error.message };
+  // If a lesson is in progress for this student, the numbers go into it (and show under the latest clip).
+  const { data: open } = await supabase.from("sessions").select("id").eq("student_id", student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let sessionId = open?.id as string | undefined;
+  if (!sessionId) {
+    const { data: session, error } = await supabase.from("sessions").insert({
+      student_id, coach_id: user.id, session_date: str(form, "session_date") || new Date().toISOString().slice(0, 10),
+      source: "manual", title: `${club} session`, note: str(form, "note"),
+    }).select("id").single();
+    if (error) return { error: error.message };
+    sessionId = session.id;
+  }
   const { error: e2 } = await supabase.from("shots").insert({
-    session_id: session.id, club, club_speed, ball_speed, smash_factor, launch_angle, spin_rate: Math.round(spin_rate!), carry, total: num(form, "total"),
+    session_id: sessionId, club, club_speed, ball_speed, smash_factor, launch_angle, spin_rate: Math.round(spin_rate!), carry, total: num(form, "total"),
   });
   if (e2) return { error: e2.message };
   revalidatePath(`/coach/students/${student_id}`);
-  redirect(`/coach/students/${student_id}?tab=data`);
+  redirect(open ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
 }
 
 // ---------- Bay import (CSV from Full Swing app / any launch monitor export) ----------
@@ -93,7 +134,7 @@ export async function importBaySession(_: ActionState, form: FormData): Promise<
 
 // ---------- Videos ----------
 /** Called after the browser has uploaded the file straight to Supabase Storage. */
-export async function registerVideo(input: { kind: "swing" | "lesson"; student_id?: string; storage_path: string; title: string; category?: string; description?: string; coach_note?: string; recorded_on?: string; duration_seconds?: number | null }) {
+export async function registerVideo(input: { kind: "swing" | "lesson"; student_id?: string; session_id?: string | null; storage_path: string; title: string; category?: string; description?: string; coach_note?: string; recorded_on?: string; duration_seconds?: number | null }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Signed out." };
@@ -101,6 +142,7 @@ export async function registerVideo(input: { kind: "swing" | "lesson"; student_i
     kind: input.kind, coach_id: user.id, student_id: input.student_id ?? null, storage_path: input.storage_path,
     title: input.title, category: input.category ?? "", description: input.description ?? "", coach_note: input.coach_note ?? "",
     recorded_on: input.recorded_on || new Date().toISOString().slice(0, 10), duration_seconds: input.duration_seconds ?? null,
+    session_id: input.session_id ?? null,
   });
   if (error) return { error: error.message };
   revalidatePath(input.student_id ? `/coach/students/${input.student_id}` : "/coach/library");

@@ -9,6 +9,7 @@ const COACH_NAV: NavItem[] = [
 ];
 const STUDENT_NAV: NavItem[] = [
   { href: "/student", label: "Home", icon: "home" },
+  { href: "/student/lesson", label: "Live", icon: "live" },
   { href: "/student/numbers", label: "My numbers", icon: "chart" },
   { href: "/student/swings", label: "My swings", icon: "cam" },
   { href: "/student/lessons", label: "Lessons", icon: "lib" },

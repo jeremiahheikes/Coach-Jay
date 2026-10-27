@@ -33,16 +33,19 @@ export async function POST(req: NextRequest) {
   if (shots.length === 0) return NextResponse.json({ error: "No shots" }, { status: 400 });
   if (!bridge.active_student_id) return NextResponse.json({ error: "No student armed. Pick one on the KIT bridge page." }, { status: 409 });
 
-  // Find or open today's live session for the armed student.
+  // Shots go into the student's lesson in progress (the coach's open session) if there is one;
+  // otherwise today's KIT session for the student, opened on the first shot.
   const today = new Date().toISOString().slice(0, 10);
-  let sessionId: string | null = bridge.active_session_id;
-  if (sessionId) {
-    const { data: s } = await admin.from("sessions").select("id, session_date, student_id").eq("id", sessionId).maybeSingle();
-    if (!s || s.session_date !== today || s.student_id !== bridge.active_student_id) sessionId = null;
+  let sessionId: string | null = null;
+  const { data: openLesson } = await admin.from("sessions").select("id").eq("student_id", bridge.active_student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (openLesson) sessionId = openLesson.id;
+  if (!sessionId && bridge.active_session_id) {
+    const { data: s } = await admin.from("sessions").select("id, session_date, student_id").eq("id", bridge.active_session_id).maybeSingle();
+    if (s && s.session_date === today && s.student_id === bridge.active_student_id) sessionId = s.id;
   }
   if (!sessionId) {
     const { data: s, error } = await admin.from("sessions").insert({
-      student_id: bridge.active_student_id, coach_id: bridge.coach_id, session_date: today, source: "kit", title: "KIT live session",
+      student_id: bridge.active_student_id, coach_id: bridge.coach_id, session_date: today, source: "kit", title: "KIT live session", status: "open",
     }).select("id").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     sessionId = s.id;

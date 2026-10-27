@@ -1,36 +1,35 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { registerVideo, updateVideoNote } from "@/app/coach/actions";
+import { finishLesson, registerVideo, updateVideoNote, type ActionState } from "@/app/coach/actions";
+import { LessonFeed } from "@/components/LessonFeed";
 import { ReviewPlayer } from "@/components/ReviewPlayer";
-import type { Video } from "@/lib/types";
+import type { Session, Shot, Video } from "@/lib/types";
 import { fmtDate } from "@/lib/types";
 
 /**
- * In-lesson flow: shoot or pick a clip → it uploads in the background → opens in slow-motion review.
- * Today's clips sit in a strip under the player so you can flip between swings.
+ * The lesson in progress, from the coach's side:
+ * capture bar (record / pick a clip) → the clip opens in slow-mo at the top of the feed,
+ * with the shots hit around it underneath → Finish lesson closes it with a summary note.
  */
-export function SessionReview({ studentId, studentName, swings, today }: { studentId: string; studentName: string; swings: Video[]; today: string }) {
+export function SessionReview({ studentId, studentName, session, clips, shots, earlier }: {
+  studentId: string; studentName: string; session: Session; clips: Video[]; shots: Shot[]; earlier: Video[];
+}) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<{ name: string; pct: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [angle, setAngle] = useState<"Face-on" | "Down-the-line">("Face-on");
   const [club, setClub] = useState("7 Iron");
   const fileRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
-  const [lastUploadedId, setLastUploadedId] = useState<string | null>(null);
+  const [lastPath, setLastPath] = useState<string | null>(null);
+  const [compare, setCompare] = useState<Video | null>(null);
+  const first = studentName.split(" ")[0];
 
-  const todays = swings.filter((s) => s.recorded_on === today);
-  const earlier = swings.filter((s) => s.recorded_on !== today);
-
-  // Selection is derived: an explicit pick wins; otherwise the clip just uploaded; otherwise today's latest.
-  const selected: Video | null =
-    (selectedId && swings.find((s) => s.id === selectedId)) ||
-    (lastUploadedId && swings.find((s) => s.storage_path === lastUploadedId)) ||
-    todays[0] || null;
-  const setSelected = (v: Video) => { setSelectedId(v.id); setLastUploadedId(null); };
+  // The clip just uploaded opens expanded; otherwise the newest one.
+  const openId = (lastPath && clips.find((c) => c.storage_path === lastPath)?.id) || clips[0]?.id || null;
 
   async function handleFile(file: File | null) {
     if (!file) return;
@@ -41,13 +40,12 @@ export function SessionReview({ studentId, studentName, swings, today }: { stude
     const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
     const path = `${user.id}/${studentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     setUploading({ name: file.name, pct: 0 });
-    // Supabase JS doesn't expose upload progress; show an indeterminate bar.
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType: file.type || "video/mp4" });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
-    const r = await registerVideo({ kind: "swing", student_id: studentId, storage_path: path, title: `${club} · ${angle}`, recorded_on: today });
+    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, recorded_on: session.session_date });
     if (r.error) { setError(r.error); setUploading(null); return; }
-    setLastUploadedId(path); setSelectedId(null);
+    setLastPath(path);
     setUploading(null);
     router.refresh();
   }
@@ -66,14 +64,11 @@ export function SessionReview({ studentId, studentName, swings, today }: { stude
               <button key={a} onClick={() => setAngle(a)} className={`px-2.5 py-1 rounded-md text-sm font-semibold ${a === angle ? "bg-surface text-ink shadow-sm" : "text-ink2"}`}>{a}</button>
             ))}
           </div>
+          <Link href={`/coach/students/${studentId}/log`} className="btn btn-sm ml-auto">+ Enter numbers</Link>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>
-            ● Record swing
-          </button>
-          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>
-            Pick from camera roll
-          </button>
+          <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>● Record swing</button>
+          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Pick from camera roll</button>
           <input ref={fileRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
           <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
         </div>
@@ -84,46 +79,59 @@ export function SessionReview({ studentId, studentName, swings, today }: { stude
           </div>
         )}
         {error && <p role="alert" className="text-sm text-bad m-0">{error}</p>}
-        <p className="text-xs text-ink3 m-0">Tip: on iPhone, set the camera to 240 fps slo-mo before recording — the frame-step gets much finer.</p>
+        <p className="text-xs text-ink3 m-0">KIT shots and numbers you enter land under the latest clip. Tip: on the phone, set the camera to 240 fps slo-mo first.</p>
       </div>
 
-      {/* Review */}
-      {selected ? (
-        <ReviewPlayer video={selected} key={selected.id}>
-          <NoteEditor video={selected} key={selected.id + selected.coach_note} />
-        </ReviewPlayer>
-      ) : (
-        <div className="card text-ink2 text-sm">Record the first swing and it opens here in slow motion.</div>
-      )}
-
-      {/* Today's clips */}
+      {/* The lesson so far */}
       <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between"><h3 className="text-lg font-semibold">Today with {studentName.split(" ")[0]}</h3><span className="eyebrow">{todays.length} clip{todays.length === 1 ? "" : "s"}</span></div>
-        {todays.length === 0 ? <p className="text-sm text-ink3">Nothing yet today.</p> : <ClipStrip clips={todays} selected={selected} onPick={setSelected} />}
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-lg font-semibold">This lesson with {first}</h3>
+          <span className="eyebrow">{clips.length} clip{clips.length === 1 ? "" : "s"} · {shots.length} shot{shots.length === 1 ? "" : "s"}</span>
+        </div>
+        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
+          clipExtra={(v) => <NoteEditor video={v} key={v.id + v.coach_note} />} />
       </section>
+
+      {/* Compare with an earlier swing */}
       {earlier.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-lg font-semibold">Earlier swings to compare</h3>
-          <ClipStrip clips={earlier} selected={selected} onPick={setSelected} showDate />
+          <h3 className="text-lg font-semibold">Compare with an earlier swing</h3>
+          {compare && <ReviewPlayer video={compare} key={compare.id} onClose={() => setCompare(null)}>{compare.coach_note && <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{compare.coach_note}</div>}</ReviewPlayer>}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {earlier.map((v) => (
+              <button key={v.id} onClick={() => setCompare(v)} className={`card !p-2.5 text-left shrink-0 w-40 ${compare?.id === v.id ? "border-accent" : "hover:border-accent"}`}>
+                <b className="block text-sm font-semibold truncate">{v.title}</b>
+                <span className="block text-xs text-ink3 truncate">{fmtDate(v.recorded_on)}</span>
+              </button>
+            ))}
+          </div>
         </section>
       )}
+
+      <FinishLesson sessionId={session.id} studentId={studentId} first={first} />
     </div>
   );
 }
 
-function ClipStrip({ clips, selected, onPick, showDate }: { clips: Video[]; selected: Video | null; onPick: (v: Video) => void; showDate?: boolean }) {
+function FinishLesson({ sessionId, studentId, first }: { sessionId: string; studentId: string; first: string }) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState<ActionState, FormData>(finishLesson, {});
+  if (!open) return <button className="btn self-start" onClick={() => setOpen(true)}>Finish lesson</button>;
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-      {clips.map((v) => (
-        <button key={v.id} onClick={() => onPick(v)} className={`card !p-2.5 text-left shrink-0 w-40 ${selected?.id === v.id ? "border-accent" : "hover:border-accent"}`}>
-          <div className="aspect-[16/10] rounded-md bg-surface2 grid place-items-center mb-2">
-            <span className="w-8 h-8 rounded-full bg-surface text-accent grid place-items-center shadow"><svg viewBox="0 0 24 24" className="w-3.5 h-3.5 ml-0.5" fill="currentColor"><path d="M7 5v14l12-7z" /></svg></span>
-          </div>
-          <b className="block text-sm font-semibold truncate">{v.title}</b>
-          <span className="block text-xs text-ink3 truncate">{showDate ? fmtDate(v.recorded_on) : v.coach_note ? v.coach_note : "No note yet"}</span>
-        </button>
-      ))}
-    </div>
+    <form action={action} className="card flex flex-col gap-3 border-accent">
+      <input type="hidden" name="session_id" value={sessionId} />
+      <input type="hidden" name="student_id" value={studentId} />
+      <div className="eyebrow">Finish lesson</div>
+      <div className="flex flex-col gap-1">
+        <label className="label" htmlFor="finish-note">Summary for {first} (shows at the top of their home page)</label>
+        <textarea id="finish-note" name="note" className="input" rows={3} placeholder="What we worked on, and what to practice before next time" />
+      </div>
+      {state.error && <p role="alert" className="text-sm text-bad m-0">{state.error}</p>}
+      <div className="flex gap-2 justify-end">
+        <button type="button" className="btn" onClick={() => setOpen(false)}>Not yet</button>
+        <button className="btn btn-primary" disabled={pending}>{pending ? "Finishing…" : "Finish lesson"}</button>
+      </div>
+    </form>
   );
 }
 
