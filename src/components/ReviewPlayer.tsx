@@ -24,8 +24,13 @@ export function ReviewPlayer({ video, onClose, children }: { video: Video; onClo
   useEffect(() => {
     let alive = true;
     fetch(`/api/video?id=${video.id}`)
-      .then(async (r) => { if (!alive) return; if (!r.ok) throw 0; const j = await r.json(); setSrc({ id: video.id, url: j.url, err: null }); })
-      .catch(() => alive && setSrc({ id: video.id, url: null, err: "Couldn't load this video." }));
+      .then(async (r) => {
+        if (!alive) return;
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.url) throw new Error(j.error || `HTTP ${r.status}`);
+        setSrc({ id: video.id, url: j.url, err: null });
+      })
+      .catch((e) => alive && setSrc({ id: video.id, url: null, err: `Couldn't load this video. ${e instanceof Error ? e.message : ""}`.trim() }));
     return () => { alive = false; };
   }, [video.id]);
 
@@ -77,14 +82,14 @@ export function ReviewPlayer({ video, onClose, children }: { video: Video; onClo
     <div className="card !p-0 overflow-hidden select-none">
       <div className="relative bg-black aspect-video max-h-[70vh]">
         {url ? (
-          <video ref={ref} src={url} playsInline preload="auto" className="w-full h-full object-contain"
+          <video ref={ref} src={url} playsInline preload="auto" className="w-full h-full object-contain" onError={() => setSrc({ id: video.id, url: null, err: "The file uploaded but this browser can't play it. Try the Camera app button, or a different browser." })}
             onClick={toggle}
             onLoadedMetadata={(e) => { setDur(e.currentTarget.duration); e.currentTarget.playbackRate = speed; }}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={(e) => { if (!playing) setT(e.currentTarget.currentTime); }}
             onEnded={() => { if (loop.on && loop.a != null && ref.current) { ref.current.currentTime = loop.a; ref.current.play(); } }} />
         ) : (
-          <div className="w-full h-full grid place-items-center text-white/70 text-sm">{err ?? "Loading…"}</div>
+          <div className="w-full h-full grid place-items-center text-white/70 text-sm p-4 text-center">{err ?? "Loading…"}</div>
         )}
         <div className="absolute top-2 right-2 chip !bg-black/60 !text-white num">{speed}×</div>
       </div>
