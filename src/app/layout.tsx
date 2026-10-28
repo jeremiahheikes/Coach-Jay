@@ -13,6 +13,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+import { RegisterSW } from "@/components/RegisterSW";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full">
@@ -22,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* eslint-disable-next-line @next/next/no-page-custom-font -- root layout applies to every page */}
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col"><RegisterSW />{children}</body>
     </html>
   );
 }
