@@ -20,6 +20,12 @@ export function ReviewPlayer({ video, onClose, children }: { video: Video; onClo
   const [t, setT] = useState(0);
   const [dur, setDur] = useState(0);
   const [loop, setLoop] = useState<{ a: number | null; b: number | null; on: boolean }>({ a: null, b: null, on: false });
+  const [aspect, setAspect] = useState<number | null>(null); // width / height of the clip, once known
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const frameRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
+  const pinchRef = useRef<{ d: number; z: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -75,23 +81,48 @@ export function ReviewPlayer({ video, onClose, children }: { video: Video; onClo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toggle, step, t]);
 
+  const ZOOMS = [1, 1.5, 2, 3];
+  const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
+    const el = frameRef.current; if (!el || z <= 1) return { x: 0, y: 0 };
+    const mx = (el.clientWidth * (z - 1)) / 2, my = (el.clientHeight * (z - 1)) / 2;
+    return { x: Math.max(-mx, Math.min(mx, p.x)), y: Math.max(-my, Math.min(my, p.y)) };
+  }, []);
+  const applyZoom = (z: number) => { setZoom(z); setPan((p) => clampPan(p, z)); };
+  const cycleZoom = () => applyZoom(ZOOMS[(ZOOMS.indexOf(zoom) + 1) % ZOOMS.length]!);
+  const fullscreen = () => { const el = frameRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null; if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else (el.requestFullscreen ?? el.webkitRequestFullscreen)?.call(el); };
+
+  // Drag to pan when zoomed; a tap (no movement) still toggles play. Two fingers pinch to zoom.
+  const onPointerDown = (e: React.PointerEvent) => { if (zoom > 1) { dragRef.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); } };
+  const onPointerMove = (e: React.PointerEvent) => { const d = dragRef.current; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true; setPan(clampPan({ x: d.px + dx, y: d.py + dy }, zoom)); };
+  const onPointerUp = () => { const d = dragRef.current; dragRef.current = null; if (!d || !d.moved) toggle(); };
+  const onTouchStart = (e: React.TouchEvent) => { if (e.touches.length === 2) { const [a, b] = [e.touches[0]!, e.touches[1]!]; pinchRef.current = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z: zoom }; dragRef.current = null; } };
+  const onTouchMove = (e: React.TouchEvent) => { const p = pinchRef.current; if (!p || e.touches.length !== 2) return; e.preventDefault(); const [a, b] = [e.touches[0]!, e.touches[1]!]; const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); applyZoom(Math.max(1, Math.min(4, p.z * (d / p.d)))); };
+  const onTouchEnd = () => { pinchRef.current = null; };
+
   const pct = dur ? (t / dur) * 100 : 0;
   const fmt = (s: number) => `${Math.floor(s)}.${String(Math.floor((s % 1) * 100)).padStart(2, "0")}s`;
 
   return (
     <div className="card !p-0 overflow-hidden select-none">
-      <div className="relative bg-black aspect-video max-h-[70vh]">
+      <div ref={frameRef} className="relative bg-black overflow-hidden mx-auto w-full touch-none" style={{ aspectRatio: aspect ?? 16 / 9, maxHeight: "75vh" }}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { dragRef.current = null; }}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         {url ? (
-          <video ref={ref} src={url} playsInline preload="auto" className="w-full h-full object-contain" onError={() => setSrc({ id: video.id, url: null, err: "The file uploaded but this browser can't play it. Try the Camera app button, or a different browser." })}
-            onClick={toggle}
-            onLoadedMetadata={(e) => { setDur(e.currentTarget.duration); e.currentTarget.playbackRate = speed; }}
+          <video ref={ref} src={url} playsInline preload="auto" className="w-full h-full object-contain" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center", cursor: zoom > 1 ? "grab" : "pointer" }}
+            onError={() => setSrc({ id: video.id, url: null, err: "The file uploaded but this browser can't play it. Try the Camera app button, or a different browser." })}
+            onLoadedMetadata={(e) => { const v = e.currentTarget; setDur(v.duration); v.playbackRate = speed; if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); }}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={(e) => { if (!playing) setT(e.currentTarget.currentTime); }}
             onEnded={() => { if (loop.on && loop.a != null && ref.current) { ref.current.currentTime = loop.a; ref.current.play(); } }} />
         ) : (
           <div className="w-full h-full grid place-items-center text-white/70 text-sm p-4 text-center">{err ?? "Loading…"}</div>
         )}
-        <div className="absolute top-2 right-2 chip !bg-black/60 !text-white num">{speed}×</div>
+        <div className="absolute top-2 right-2 flex items-center gap-1.5" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+          <span className="chip !bg-black/60 !text-white num">{speed}×</span>
+          <button onClick={cycleZoom} className="chip !bg-black/60 !text-white num" aria-label="Zoom" title="Zoom (pinch on phone, drag to pan)">🔍 {zoom}×</button>
+          <button onClick={fullscreen} className="chip !bg-black/60 !text-white" aria-label="Fullscreen" title="Fullscreen">⤢</button>
+        </div>
+        {zoom > 1 && <button onClick={() => applyZoom(1)} onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} className="absolute bottom-2 right-2 chip !bg-black/60 !text-white">Reset zoom</button>}
       </div>
 
       {/* Scrubber */}
