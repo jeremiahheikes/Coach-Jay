@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { finishLesson, registerVideo, updateVideoNote, type ActionState } from "@/app/coach/actions";
 import { LessonFeed } from "@/components/LessonFeed";
 import { ReviewPlayer } from "@/components/ReviewPlayer";
+import { SwingCamera } from "@/components/SwingCamera";
 import type { Session, Shot, Video } from "@/lib/types";
 import { fmtDate } from "@/lib/types";
 
@@ -26,6 +27,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
   const pickRef = useRef<HTMLInputElement>(null);
   const [lastPath, setLastPath] = useState<string | null>(null);
   const [compare, setCompare] = useState<Video | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(true);
   const first = studentName.split(" ")[0];
 
   // The clip just uploaded opens expanded; otherwise the newest one.
@@ -40,7 +42,8 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
     const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
     const path = `${user.id}/${studentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     setUploading({ name: file.name, pct: 0 });
-    const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType: file.type || "video/mp4" });
+    const contentType = file.type || (ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4");
+    const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
     const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, recorded_on: session.session_date });
@@ -66,9 +69,11 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           </div>
           <Link href={`/coach/students/${studentId}/log`} className="btn btn-sm ml-auto">+ Enter numbers</Link>
         </div>
+        {cameraOpen ? <SwingCamera onClip={handleFile} busy={!!uploading} /> : null}
         <div className="flex flex-wrap gap-2">
-          <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>● Record swing</button>
-          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Pick from camera roll</button>
+          <button className={`btn flex-1 min-w-[140px] !py-3 ${cameraOpen ? "" : "btn-primary"}`} disabled={!!uploading} onClick={() => setCameraOpen((o) => !o)}>{cameraOpen ? "Hide in-app camera" : "● In-app camera"}</button>
+          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>Camera app (slo-mo)</button>
+          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Camera roll</button>
           <input ref={fileRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
           <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
         </div>
@@ -79,7 +84,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           </div>
         )}
         {error && <p role="alert" className="text-sm text-bad m-0">{error}</p>}
-        <p className="text-xs text-ink3 m-0">KIT shots and numbers you enter land under the latest clip. Tip: on the phone, set the camera to 240 fps slo-mo first.</p>
+        <p className="text-xs text-ink3 m-0">KIT shots and numbers you enter land under the latest clip. The in-app camera records at normal speed; for true 240 fps slo-mo use the camera app button.</p>
       </div>
 
       {/* The lesson so far */}
