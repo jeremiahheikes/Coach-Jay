@@ -72,8 +72,8 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
         {cameraOpen ? <SwingCamera onClip={handleFile} busy={!!uploading} /> : null}
         <div className="flex flex-wrap gap-2">
           <button className={`btn flex-1 min-w-[140px] !py-3 ${cameraOpen ? "" : "btn-primary"}`} disabled={!!uploading} onClick={() => setCameraOpen((o) => !o)}>{cameraOpen ? "Hide in-app camera" : "● In-app camera"}</button>
-          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>Camera app (slo-mo)</button>
-          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Camera roll</button>
+          <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Add slo-mo from gallery</button>
+          <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>Phone camera app</button>
           <input ref={fileRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
           <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
         </div>
@@ -84,7 +84,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           </div>
         )}
         {error && <p role="alert" className="text-sm text-bad m-0">{error}</p>}
-        <p className="text-xs text-ink3 m-0">KIT shots and numbers you enter land under the latest clip. The in-app camera records at normal speed; for true 240 fps slo-mo use the camera app button.</p>
+        <p className="text-xs text-ink3 m-0">Sharpest clips: record in the phone&apos;s camera app on Slow motion, then <b>Add slo-mo from gallery</b>. The in-app camera is quicker but normal speed. KIT shots and entered numbers land under the latest clip.</p>
       </div>
 
       {/* The lesson so far */}
