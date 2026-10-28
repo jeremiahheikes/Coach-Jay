@@ -20,12 +20,12 @@ export function ImportForm({ studentId }: { studentId: string }) {
       <input type="hidden" name="student_id" value={studentId} />
       <div className="card flex flex-col gap-3">
         <p className="text-sm text-ink2 m-0">
-          Export the session from the Full Swing app (or any launch monitor) as CSV and drop it here. Columns are matched by name, so
-          <code className="mx-1">Club, Club Speed, Ball Speed, Launch Angle, Spin Rate, Carry, Total, Side</code> all work in any order.
+          In the Full Swing app, open the session → <b>Share</b> → open the link → tap the <b>CSV</b> button, then drop that file here.
+          Every shot comes in with its time, club and all 16 numbers. Other launch-monitor exports work too (columns are matched by name).
         </p>
         <div className="flex flex-col gap-1"><label className="label" htmlFor="file">CSV file</label><input className="input" id="file" name="file" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(e) => onFile(e.target.files?.[0] ?? null)} required /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1"><label className="label" htmlFor="date">Session date</label><input className="input" id="date" name="session_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></div>
+          <div className="flex flex-col gap-1"><label className="label" htmlFor="date">Session date (blank = from the file)</label><input className="input" id="date" name="session_date" type="date" placeholder="From the file" /></div>
           <div className="flex flex-col gap-1"><label className="label" htmlFor="club">Club{needsClub ? " (file has no club column)" : " (used if file has none)"}</label><select className="input" id="club" name="club" defaultValue="7 Iron">{CLUBS.map((c) => <option key={c}>{c}</option>)}</select></div>
         </div>
         <div className="flex flex-col gap-1"><label className="label" htmlFor="note">Session note (student sees this)</label><textarea className="input" id="note" name="note" rows={2} /></div>

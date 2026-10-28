@@ -104,7 +104,7 @@ export async function logSession(_: ActionState, form: FormData): Promise<Action
   redirect(open ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
 }
 
-// ---------- Bay import (CSV from Full Swing app / any launch monitor export) ----------
+// ---------- Bay import (Full Swing session export CSV, or any launch-monitor export) ----------
 export async function importBaySession(_: ActionState, form: FormData): Promise<ActionState> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -115,21 +115,33 @@ export async function importBaySession(_: ActionState, form: FormData): Promise<
   const { shots } = parseCsv(await file.text());
   if (shots.length === 0) return { error: "No shot rows found. The file needs at least a Carry or Ball Speed column." };
   const defaultClub = str(form, "club");
-  const { data: session, error } = await supabase.from("sessions").insert({
-    student_id, coach_id: user.id, session_date: str(form, "session_date") || new Date().toISOString().slice(0, 10),
-    source: "bay_import", title: `Bay session · ${shots.length} shots`, note: str(form, "note"),
-  }).select("id").single();
-  if (error) return { error: error.message };
-  const rows = shots.map((s) => ({
-    session_id: session.id, club: s.club === "Unknown" && defaultClub ? defaultClub : s.club,
-    club_speed: s.club_speed, ball_speed: s.ball_speed,
-    smash_factor: s.club_speed && s.ball_speed ? +(s.ball_speed / s.club_speed).toFixed(2) : null,
-    launch_angle: s.launch_angle, spin_rate: s.spin_rate == null ? null : Math.round(s.spin_rate), carry: s.carry, total: s.total, side: s.side, raw: s.raw,
+  const firstHit = shots.find((s) => s.hit_at)?.hit_at;
+  const session_date = str(form, "session_date") || (firstHit ? firstHit.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const name = file.name.replace(/\.csv$/i, "").trim();
+  const title = (name && name.toLowerCase() !== "export" ? name : "Bay session") + ` · ${shots.length} shots`;
+
+  // Into the lesson in progress if there is one; otherwise a new bay session.
+  const { data: open } = await supabase.from("sessions").select("id").eq("student_id", student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let sessionId = open?.id as string | undefined;
+  if (!sessionId) {
+    const { data: session, error } = await supabase.from("sessions").insert({
+      student_id, coach_id: user.id, session_date, source: "bay_import", title, note: str(form, "note"),
+    }).select("id").single();
+    if (error) return { error: error.message };
+    sessionId = session.id;
+  }
+  const rows = shots.map((s, i) => ({
+    session_id: sessionId, club: s.club === "Unknown" && defaultClub ? defaultClub : s.club,
+    hit_at: s.hit_at ?? new Date(Date.parse(session_date + "T12:00:00") + i * 1000).toISOString(),
+    club_speed: s.club_speed, ball_speed: s.ball_speed, smash_factor: s.smash_factor,
+    launch_angle: s.launch_angle, launch_direction: s.launch_direction, spin_rate: s.spin_rate == null ? null : Math.round(s.spin_rate), spin_axis: s.spin_axis,
+    face_angle: s.face_angle, attack_angle: s.attack_angle, club_path: s.club_path,
+    carry: s.carry, total: s.total, side: s.side, apex: s.apex, raw: s.raw,
   }));
   const { error: e2 } = await supabase.from("shots").insert(rows);
   if (e2) return { error: e2.message };
   revalidatePath(`/coach/students/${student_id}`);
-  redirect(`/coach/students/${student_id}?tab=data`);
+  redirect(open ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
 }
 
 // ---------- Videos ----------
