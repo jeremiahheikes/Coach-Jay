@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/AppShell";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { getLessonDetail, getOpenLesson, getStudent, getStudentBundle } from "@/lib/data";
 import { startLesson } from "@/app/coach/actions";
 import { SessionReview } from "./SessionReview";
@@ -27,6 +28,7 @@ export default async function SessionPage(props: PageProps<"/coach/students/[id]
   return (
     <>
       <PageHeader title="Lesson in progress" eyebrow={`${student.full_name} · started ${new Date(open.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`} back={`/coach/students/${id}`} />
+      <AutoRefresh seconds={15} />
       <SessionReview studentId={id} studentName={student.full_name} session={detail.session} clips={detail.clips} shots={detail.shots} earlier={earlier} />
     </>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { LessonFeed } from "@/components/LessonFeed";
 import { getLessonDetail, getMyStudentRow, getOpenLesson, getStudentBundle, requireUser } from "@/lib/data";
 import { fmtDate } from "@/lib/types";
@@ -28,6 +29,7 @@ export default async function StudentLessonPage() {
   return (
     <>
       <PageHeader title="Live lesson" eyebrow={`Started ${new Date(detail.session.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · ${detail.clips.length} clip${detail.clips.length === 1 ? "" : "s"} · ${detail.shots.length} shot${detail.shots.length === 1 ? "" : "s"}`} />
+      <AutoRefresh seconds={15} />
       <LessonFeed clips={detail.clips} shots={detail.shots} emptyText="Coach Jay hasn't recorded a swing yet — this fills in as the lesson goes." />
     </>
   );

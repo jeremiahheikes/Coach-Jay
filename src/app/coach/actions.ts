@@ -105,33 +105,44 @@ export async function logSession(_: ActionState, form: FormData): Promise<Action
 }
 
 // ---------- Bay import (Full Swing session export CSV, or any launch-monitor export) ----------
-export async function importBaySession(_: ActionState, form: FormData): Promise<ActionState> {
+/**
+ * Shared by the import form and the gallery share page. Safe to run repeatedly on the same
+ * session's CSV: shots whose hit time is already stored are skipped, so a mid-lesson re-import
+ * only adds the new ones.
+ */
+export async function importCsvText(input: { student_id: string; text: string; filename?: string; session_date?: string; club?: string; note?: string }): Promise<{ error?: string; added?: number; skipped?: number; sessionId?: string; inLesson?: boolean }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Signed out." };
-  const student_id = str(form, "student_id");
-  const file = form.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "Choose a CSV file." };
-  const { shots } = parseCsv(await file.text());
+  const { student_id } = input;
+  const { shots } = parseCsv(input.text);
   if (shots.length === 0) return { error: "No shot rows found. The file needs at least a Carry or Ball Speed column." };
-  const defaultClub = str(form, "club");
   const firstHit = shots.find((s) => s.hit_at)?.hit_at;
-  const session_date = str(form, "session_date") || (firstHit ? firstHit.slice(0, 10) : new Date().toISOString().slice(0, 10));
-  const name = file.name.replace(/\.csv$/i, "").trim();
+  const session_date = input.session_date || (firstHit ? firstHit.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const name = (input.filename ?? "").replace(/\.csv$/i, "").trim();
   const title = (name && name.toLowerCase() !== "export" ? name : "Bay session") + ` · ${shots.length} shots`;
 
-  // Into the lesson in progress if there is one; otherwise a new bay session.
+  // Into the lesson in progress if there is one; otherwise today's bay session for this student (reused if it exists).
   const { data: open } = await supabase.from("sessions").select("id").eq("student_id", student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
   let sessionId = open?.id as string | undefined;
   if (!sessionId) {
+    const { data: existing } = await supabase.from("sessions").select("id").eq("student_id", student_id).eq("session_date", session_date).eq("source", "bay_import").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    sessionId = existing?.id;
+  }
+  if (!sessionId) {
     const { data: session, error } = await supabase.from("sessions").insert({
-      student_id, coach_id: user.id, session_date, source: "bay_import", title, note: str(form, "note"),
+      student_id, coach_id: user.id, session_date, source: "bay_import", title, note: input.note ?? "",
     }).select("id").single();
     if (error) return { error: error.message };
     sessionId = session.id;
   }
-  const rows = shots.map((s, i) => ({
-    session_id: sessionId, club: s.club === "Unknown" && defaultClub ? defaultClub : s.club,
+  // Skip shots already in this session (same hit time, to the second).
+  const { data: have } = await supabase.from("shots").select("hit_at").eq("session_id", sessionId);
+  const seen = new Set((have ?? []).map((r) => new Date(r.hit_at as string).toISOString().slice(0, 19)));
+  const fresh = shots.filter((s) => !s.hit_at || !seen.has(s.hit_at.slice(0, 19)));
+  if (fresh.length === 0) return { added: 0, skipped: shots.length, sessionId, inLesson: !!open };
+  const rows = fresh.map((s, i) => ({
+    session_id: sessionId, club: s.club === "Unknown" && input.club ? input.club : s.club,
     hit_at: s.hit_at ?? new Date(Date.parse(session_date + "T12:00:00") + i * 1000).toISOString(),
     club_speed: s.club_speed, ball_speed: s.ball_speed, smash_factor: s.smash_factor,
     launch_angle: s.launch_angle, launch_direction: s.launch_direction, spin_rate: s.spin_rate == null ? null : Math.round(s.spin_rate), spin_axis: s.spin_axis,
@@ -141,7 +152,17 @@ export async function importBaySession(_: ActionState, form: FormData): Promise<
   const { error: e2 } = await supabase.from("shots").insert(rows);
   if (e2) return { error: e2.message };
   revalidatePath(`/coach/students/${student_id}`);
-  redirect(open ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
+  return { added: rows.length, skipped: shots.length - rows.length, sessionId, inLesson: !!open };
+}
+
+export async function importBaySession(_: ActionState, form: FormData): Promise<ActionState> {
+  const student_id = str(form, "student_id");
+  const file = form.get("file") as File | null;
+  if (!file || file.size === 0) return { error: "Choose a CSV file." };
+  const r = await importCsvText({ student_id, text: await file.text(), filename: file.name, session_date: str(form, "session_date") || undefined, club: str(form, "club"), note: str(form, "note") });
+  if (r.error) return { error: r.error };
+  if (r.added === 0) return { error: `All ${r.skipped} shots in that file are already logged.` };
+  redirect(r.inLesson ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
 }
 
 // ---------- Videos ----------

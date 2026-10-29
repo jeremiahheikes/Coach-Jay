@@ -15,7 +15,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       try {
         const form = await event.request.formData();
-        const file = form.get("video") || form.get("file") || [...form.values()].find((v) => v instanceof File);
+        const file = form.get("video") || form.get("data") || form.get("file") || [...form.values()].find((v) => v instanceof File);
         if (!(file instanceof File)) return Response.redirect("/coach/share?err=nofile", 303);
         const cache = await caches.open(SHARE_CACHE);
         await cache.put(PENDING, new Response(file, { headers: { "content-type": file.type || "video/mp4", "x-filename": encodeURIComponent(file.name || "shared.mp4"), "x-size": String(file.size) } }));
