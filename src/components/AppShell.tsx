@@ -5,6 +5,7 @@ import { signOut } from "@/app/(auth)/actions";
 const COACH_NAV: NavItem[] = [
   { href: "/coach", label: "Students", icon: "users" },
   { href: "/coach/library", label: "Video lessons", icon: "lib" },
+  { href: "/coach/bay", label: "Bay screen", icon: "screen" },
   { href: "/coach/bridge", label: "KIT bridge", icon: "radar" },
 ];
 const STUDENT_NAV: NavItem[] = [

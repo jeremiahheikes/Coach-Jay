@@ -1,5 +1,5 @@
 export type Role = "coach" | "student";
-export type SessionSource = "manual" | "kit" | "bay_import";
+export type SessionSource = "manual" | "kit" | "bay_import" | "screen";
 
 export const CLUBS = [
   "Driver", "3 Wood", "5 Wood", "Hybrid",
@@ -29,7 +29,7 @@ export type Shot = {
   launch_angle: number | null; launch_direction: number | null; spin_rate: number | null;
   spin_axis: number | null; face_angle: number | null; attack_angle: number | null;
   club_path: number | null; carry: number | null; total: number | null; side: number | null;
-  apex: number | null; raw: unknown;
+  apex: number | null; raw: unknown; provisional: boolean;
 };
 
 export type ClubAverage = {
@@ -62,6 +62,7 @@ export const SOURCE_LABEL: Record<SessionSource, string> = {
   manual: "Entered by coach",
   kit: "Full Swing KIT (live)",
   bay_import: "Simulator bay import",
+  screen: "Read off the bay screen",
 };
 
 export function initials(name: string) {

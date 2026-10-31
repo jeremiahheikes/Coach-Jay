@@ -80,6 +80,24 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
   };
   const stopRecording = () => { if (recRef.current?.state === "recording") recRef.current.stop(); };
 
+  // Presentation clicker (Bluetooth, acts as a keyboard): Page Down / Right / Enter toggles record,
+  // and turns the camera on first if it's off. Camera-shutter remotes send volume keys the browser never sees.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!["PageDown", "ArrowRight", "Enter", "KeyB"].includes(e.code)) return;
+      e.preventDefault();
+      if (busy) return;
+      if (state === "off") { start(); return; }
+      if (state === "live") record();
+      else if (state === "recording") stopRecording();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, busy, start]);
+
   if (!supported) return <p className="text-sm text-ink3 m-0">In-app recording isn&apos;t available in this browser — use Record swing below, which opens the camera app.</p>;
 
   return (
@@ -120,7 +138,7 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
         )}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-ink3">{state === "off" ? "Camera is off." : state === "recording" ? `Tap the square to stop (auto-stops at ${maxSeconds}s).` : "Tap the red button right before the swing; tap again after the finish."}</span>
+        <span className="text-xs text-ink3">{state === "off" ? "Camera is off. A clicker's Page Down turns it on." : state === "recording" ? `Tap the square or click Page Down to stop (auto-stops at ${maxSeconds}s).` : "Red button or clicker (Page Down) before the swing; again after the finish."}</span>
         {state !== "off" && <button onClick={stop} className="btn btn-sm">Turn off</button>}
       </div>
       {error && <p role="alert" className="text-sm text-bad m-0">{error}</p>}
