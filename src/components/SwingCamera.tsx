@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Phones record at 30 fps here (browser cameras don't expose 240 fps slo-mo);
  * the review player's frame-step still works, just coarser than a camera-app slo-mo clip.
  */
-export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: File) => void; busy?: boolean; maxSeconds?: number }) {
+export function SwingCamera({ onClip, busy, maxSeconds = 30 }: { onClip: (file: File) => void; busy?: boolean; maxSeconds?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
@@ -19,6 +19,9 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
   const [state, setState] = useState<"off" | "starting" | "live" | "recording">("off");
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [autoStopped, setAutoStopped] = useState(false); // shown after the time limit cut a recording; record is locked briefly
+  const autoStopRef = useRef(false);
+  const beep = () => { try { const ac = new AudioContext(); const o = ac.createOscillator(); const g = ac.createGain(); o.connect(g); g.connect(ac.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start(); o.stop(ac.currentTime + 0.18); } catch { /* no audio */ } };
   const supported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
 
   const stop = useCallback(() => {
@@ -66,6 +69,7 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
       const blob = new Blob(chunksRef.current, { type: type.split(";")[0] });
       setState(streamRef.current ? "live" : "off");
       setElapsed(0);
+      if (autoStopRef.current) { autoStopRef.current = false; setAutoStopped(true); beep(); window.setTimeout(() => setAutoStopped(false), 2500); }
       if (blob.size > 0) onClip(new File([blob], `swing-${Date.now()}.${ext}`, { type: blob.type }));
     };
     rec.start(250);
@@ -75,7 +79,7 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
     timerRef.current = window.setInterval(() => {
       const s = (Date.now() - t0) / 1000;
       setElapsed(s);
-      if (s >= maxSeconds && rec.state === "recording") rec.stop();
+      if (s >= maxSeconds && rec.state === "recording") { autoStopRef.current = true; rec.stop(); }
     }, 100);
   };
   const stopRecording = () => { if (recRef.current?.state === "recording") recRef.current.stop(); };
@@ -95,6 +99,9 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
           </button>
         )}
         {state === "starting" && <div className="absolute inset-0 grid place-items-center text-white/80 text-sm">Starting camera…</div>}
+        {autoStopped && (
+          <div className="absolute inset-x-0 top-0 bg-warn text-black text-sm font-semibold text-center py-2">Recording stopped at {maxSeconds}s and saved — one tap per swing keeps clips short</div>
+        )}
         {state === "recording" && (
           <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 text-white text-xs font-semibold px-2 py-1 rounded-full">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> REC {elapsed.toFixed(1)}s
@@ -108,7 +115,7 @@ export function SwingCamera({ onClip, busy, maxSeconds = 20 }: { onClip: (file: 
         {(state === "live" || state === "recording") && (
           <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-6">
             {state === "live" ? (
-              <button onClick={record} disabled={busy} aria-label="Record swing" className="w-16 h-16 rounded-full border-4 border-white grid place-items-center disabled:opacity-50">
+              <button onClick={record} disabled={busy || autoStopped} aria-label="Record swing" className="w-16 h-16 rounded-full border-4 border-white grid place-items-center disabled:opacity-50">
                 <span className="w-12 h-12 rounded-full bg-red-500" />
               </button>
             ) : (
