@@ -40,3 +40,24 @@ export function lessonTitle(clips: number, shots: number) {
   if (shots) parts.push(`${shots} shot${shots === 1 ? "" : "s"}`);
   return parts.length ? `Lesson · ${parts.join(" · ")}` : "Lesson";
 }
+
+/** Angle from a clip title like "7 Iron · Down-the-line". */
+export function clipAngle(v: Video): "Face-on" | "Down-the-line" | null {
+  if (/down-the-line/i.test(v.title)) return "Down-the-line";
+  if (/face-on/i.test(v.title)) return "Face-on";
+  return null;
+}
+
+/** The other-angle clip recorded closest in time (within `windowMs`), if any. */
+export function suggestPartner(clip: Video, all: Video[], windowMs = 120_000): Video | null {
+  const a = clipAngle(clip); if (!a) return null;
+  const t = Date.parse(clip.created_at);
+  let best: Video | null = null, bestD = Infinity;
+  for (const v of all) {
+    if (v.id === clip.id) continue;
+    const b = clipAngle(v); if (!b || b === a) continue;
+    const d = Math.abs(Date.parse(v.created_at) - t);
+    if (d <= windowMs && d < bestD) { best = v; bestD = d; }
+  }
+  return best;
+}

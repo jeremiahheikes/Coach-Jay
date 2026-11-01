@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
 import { ReviewPlayer } from "./ReviewPlayer";
-import { groupShotsByClip, avg, type ClipGroup } from "@/lib/lesson";
+import { DualPlayer } from "./DualPlayer";
+import { groupShotsByClip, avg, suggestPartner, type ClipGroup } from "@/lib/lesson";
 import type { Shot, Video } from "@/lib/types";
+import { fmtDate } from "@/lib/types";
 
 const COLS = [
   { key: "carry", label: "Carry", unit: "yds", d: 0 },
@@ -22,29 +24,47 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: 
  * `openId` (optional) is the clip to start expanded, e.g. the one just recorded.
  * `clipExtra` renders under an expanded clip (the coach's note editor); `noteOf` shows a read-only note.
  */
-export function LessonFeed({ clips, shots, openId, clipExtra, emptyText }: {
+export function LessonFeed({ clips, shots, openId, clipExtra, emptyText, library }: {
   clips: Video[]; shots: Shot[]; openId?: string | null;
   clipExtra?: (v: Video) => React.ReactNode; emptyText?: string;
+  /** Other clips that can be paired with (earlier swings); defaults to this lesson's clips. */
+  library?: Video[];
 }) {
   const groups = groupShotsByClip(clips, shots);
   const [open, setOpen] = useState<string | null | undefined>(undefined);
+  const [pair, setPair] = useState<{ a: Video; b: Video } | null>(null);
   const openClip = open === undefined ? openId ?? null : open;
+  const pool = library ?? clips;
   if (groups.length === 0) return <div className="card text-ink2 text-sm">{emptyText ?? "Nothing in this lesson yet."}</div>;
   return (
     <div className="flex flex-col gap-3">
-      {groups.map((g) => <ClipCard key={g.clip?.id ?? "warmup"} group={g} expanded={!!g.clip && g.clip.id === openClip} onToggle={() => g.clip && setOpen(g.clip.id === openClip ? null : g.clip.id)} extra={clipExtra} />)}
+      {pair && <DualPlayer left={pair.a} right={pair.b} key={pair.a.id + pair.b.id} onClose={() => setPair(null)} />}
+      {groups.map((g) => <ClipCard key={g.clip?.id ?? "warmup"} group={g} expanded={!!g.clip && g.clip.id === openClip} onToggle={() => g.clip && setOpen(g.clip.id === openClip ? null : g.clip.id)} extra={clipExtra}
+        partner={g.clip ? suggestPartner(g.clip, pool) : null} pool={pool} onPair={(a, b) => { setPair({ a, b }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />)}
     </div>
   );
 }
 
-function ClipCard({ group, expanded, onToggle, extra }: { group: ClipGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode }) {
+function ClipCard({ group, expanded, onToggle, extra, partner, pool, onPair }: { group: ClipGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode; partner: Video | null; pool: Video[]; onPair: (a: Video, b: Video) => void }) {
   const { clip, shots } = group;
+  const [picking, setPicking] = useState(false);
+  const others = clip ? pool.filter((v) => v.id !== clip.id) : [];
   return (
     <section className={`card !p-0 overflow-hidden flex flex-col ${expanded ? "border-accent" : ""}`}>
       {clip ? (
         expanded ? (
           <div className="p-3 flex flex-col gap-3">
             <ReviewPlayer video={clip} key={clip.id} onClose={onToggle}>
+              <div className="flex flex-wrap items-center gap-2">
+                {partner && <button className="btn btn-sm btn-primary" onClick={() => onPair(clip, partner)}>▶▶ View with {partner.title.split(" · ").pop()} ({time(partner.created_at)})</button>}
+                <button className="btn btn-sm" onClick={() => setPicking((p) => !p)} disabled={others.length === 0}>View with…</button>
+                {picking && (
+                  <select className="input !w-auto" defaultValue="" onChange={(e) => { const v = others.find((o) => o.id === e.target.value); if (v) { setPicking(false); onPair(clip, v); } }}>
+                    <option value="" disabled>Pick a clip</option>
+                    {others.map((o) => <option key={o.id} value={o.id}>{o.title} · {fmtDate(o.recorded_on)} {time(o.created_at)}</option>)}
+                  </select>
+                )}
+              </div>
               {extra ? extra(clip) : clip.coach_note ? <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{clip.coach_note}</div> : null}
             </ReviewPlayer>
           </div>

@@ -93,7 +93,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           <h3 className="text-lg font-semibold">This lesson with {first}</h3>
           <span className="eyebrow">{clips.length} clip{clips.length === 1 ? "" : "s"} · {shots.length} shot{shots.length === 1 ? "" : "s"}</span>
         </div>
-        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
+        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} library={[...clips, ...earlier]} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
           clipExtra={(v) => <NoteEditor video={v} key={v.id + v.coach_note} />} />
       </section>
 
