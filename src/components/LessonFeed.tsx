@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ReviewPlayer } from "./ReviewPlayer";
 import { DualPlayer } from "./DualPlayer";
 import { groupShotsBySwing, groupSwings, avg, type Swing, type SwingGroup } from "@/lib/lesson";
@@ -22,9 +22,11 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: 
  * The lesson as a scrolling feed: one entry per swing (face-on + down-the-line together when both
  * exist), then the shots hit around it. `openId` is a clip id or swing id to start expanded.
  */
-export function LessonFeed({ clips, shots, openId, clipExtra, emptyText }: {
+export function LessonFeed({ clips, shots, openId, clipExtra, emptyText, onAddView, busy }: {
   clips: Video[]; shots: Shot[]; openId?: string | null;
   clipExtra?: (v: Video) => React.ReactNode; emptyText?: string;
+  /** Coach only: add the missing view of a swing from the gallery. */
+  onAddView?: (swingId: string, angle: "Face-on" | "Down-the-line", file: File) => void; busy?: boolean;
 }) {
   const swings = groupSwings(clips);
   const groups = groupShotsBySwing(swings, shots);
@@ -33,14 +35,15 @@ export function LessonFeed({ clips, shots, openId, clipExtra, emptyText }: {
   if (groups.length === 0) return <div className="card text-ink2 text-sm">{emptyText ?? "Nothing in this lesson yet."}</div>;
   return (
     <div className="flex flex-col gap-3">
-      {groups.map((g) => <SwingCard key={g.swing?.id ?? "warmup"} group={g} expanded={!!g.swing && g.swing.id === openSwing} onToggle={() => g.swing && setOpen(g.swing.id === openSwing ? null : g.swing.id)} extra={clipExtra} />)}
+      {groups.map((g) => <SwingCard key={g.swing?.id ?? "warmup"} group={g} expanded={!!g.swing && g.swing.id === openSwing} onToggle={() => g.swing && setOpen(g.swing.id === openSwing ? null : g.swing.id)} extra={clipExtra} onAddView={onAddView} busy={busy} />)}
     </div>
   );
 }
 
-function SwingCard({ group, expanded, onToggle, extra }: { group: SwingGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode }) {
+function SwingCard({ group, expanded, onToggle, extra, onAddView, busy }: { group: SwingGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode; onAddView?: (swingId: string, angle: "Face-on" | "Down-the-line", file: File) => void; busy?: boolean }) {
   const { swing, shots } = group;
   const [view, setView] = useState<"both" | "face" | "dtl">("both");
+  const pickRef = useRef<HTMLInputElement>(null);
   if (!swing) {
     return (
       <section className="card !p-0 overflow-hidden flex flex-col">
@@ -69,7 +72,21 @@ function SwingCard({ group, expanded, onToggle, extra }: { group: SwingGroup; ex
             <ReviewPlayer video={view === "dtl" && swing.dtl ? swing.dtl : view === "face" && swing.faceOn ? swing.faceOn : single} key={swing.id + view} onClose={onToggle} />
           )}
           {extra ? extra(single) : note ? <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{note}</div> : null}
-          {!both && <p className="text-xs text-ink3 m-0">{swing.faceOn ? "No down-the-line view yet — share the GoPro clip and pick this swing." : "No face-on view yet."}</p>}
+          {!both && (
+            <div className="flex flex-wrap items-center gap-2">
+              {onAddView ? (
+                <>
+                  <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => pickRef.current?.click()}>
+                    {busy ? "Uploading…" : `+ Add ${swing.faceOn ? "down-the-line" : "face-on"} from gallery`}
+                  </button>
+                  <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddView(swing.id, swing.faceOn ? "Down-the-line" : "Face-on", f); e.target.value = ""; }} />
+                  <span className="text-xs text-ink3">Pick the GoPro clip of this swing.</span>
+                </>
+              ) : (
+                <p className="text-xs text-ink3 m-0">{swing.faceOn ? "Down-the-line view coming." : "Face-on view coming."}</p>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <button onClick={onToggle} className="flex items-center gap-3 p-3 text-left">

@@ -40,8 +40,9 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
   // The clip just uploaded opens expanded; otherwise the newest one.
   const openId = (lastPath && clips.find((c) => c.storage_path === lastPath)?.id) || clips[0]?.id || null;
 
-  async function handleFile(file: File | null, opts?: { swingId?: string | null }) {
+  async function handleFile(file: File | null, opts?: { swingId?: string | null; angle?: "Face-on" | "Down-the-line" }) {
     if (!file) return;
+    const useAngle = opts?.angle ?? angle;
     setError(null);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,7 +54,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
-    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, angle, swing_id: opts?.swingId ?? null, recorded_on: session.session_date });
+    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${useAngle}`, angle: useAngle, swing_id: opts?.swingId ?? null, recorded_on: session.session_date });
     if (r.error) { setError(r.error); setUploading(null); return; }
     setLastPath(path);
     setUploading(null);
@@ -108,7 +109,8 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           <h3 className="text-lg font-semibold">This lesson with {first}</h3>
           <span className="eyebrow">{clips.length} clip{clips.length === 1 ? "" : "s"} · {shots.length} shot{shots.length === 1 ? "" : "s"}</span>
         </div>
-        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
+        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} busy={!!uploading}
+          onAddView={(swingId, viewAngle, file) => { setAngle(viewAngle); handleFile(file, { swingId, angle: viewAngle }); }} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
           clipExtra={(v) => <NoteEditor video={v} key={v.id + v.coach_note} />} />
       </section>
 
