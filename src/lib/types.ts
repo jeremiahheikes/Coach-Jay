@@ -43,7 +43,7 @@ export type Video = {
   id: string; kind: "swing" | "lesson"; coach_id: string; student_id: string | null;
   storage_path: string; title: string; category: string; description: string;
   coach_note: string; recorded_on: string; duration_seconds: number | null; created_at: string;
-  session_id: string | null;
+  session_id: string | null; swing_id: string | null; angle: "Face-on" | "Down-the-line" | null;
 };
 
 export type Assignment = { id: string; video_id: string; student_id: string; assigned_at: string; watched_at: string | null };

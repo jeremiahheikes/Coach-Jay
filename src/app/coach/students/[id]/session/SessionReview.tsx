@@ -46,7 +46,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
-    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, recorded_on: session.session_date });
+    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, angle, recorded_on: session.session_date });
     if (r.error) { setError(r.error); setUploading(null); return; }
     setLastPath(path);
     setUploading(null);
@@ -93,7 +93,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           <h3 className="text-lg font-semibold">This lesson with {first}</h3>
           <span className="eyebrow">{clips.length} clip{clips.length === 1 ? "" : "s"} · {shots.length} shot{shots.length === 1 ? "" : "s"}</span>
         </div>
-        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} library={[...clips, ...earlier]} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
+        <LessonFeed clips={clips} shots={shots} openId={openId} key={openId} emptyText="Record the first swing and it opens here in slow motion, with the numbers underneath."
           clipExtra={(v) => <NoteEditor video={v} key={v.id + v.coach_note} />} />
       </section>
 

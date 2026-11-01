@@ -167,11 +167,13 @@ export async function importBaySession(_: ActionState, form: FormData): Promise<
 
 // ---------- Videos ----------
 /** Called after the browser has uploaded the file straight to Supabase Storage. */
-export async function registerVideo(input: { kind: "swing" | "lesson"; student_id?: string; session_id?: string | null; storage_path: string; title: string; category?: string; description?: string; coach_note?: string; recorded_on?: string; duration_seconds?: number | null }) {
+export async function registerVideo(input: { kind: "swing" | "lesson"; student_id?: string; session_id?: string | null; swing_id?: string | null; angle?: "Face-on" | "Down-the-line" | null; storage_path: string; title: string; category?: string; description?: string; coach_note?: string; recorded_on?: string; duration_seconds?: number | null }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Signed out." };
+  const swing_id = input.swing_id ?? crypto.randomUUID();
   const { error } = await supabase.from("videos").insert({
+    swing_id, angle: input.angle ?? null,
     kind: input.kind, coach_id: user.id, student_id: input.student_id ?? null, storage_path: input.storage_path,
     title: input.title, category: input.category ?? "", description: input.description ?? "", coach_note: input.coach_note ?? "",
     recorded_on: input.recorded_on || new Date().toISOString().slice(0, 10), duration_seconds: input.duration_seconds ?? null,

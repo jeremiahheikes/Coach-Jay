@@ -6,8 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { importCsvText, registerVideo } from "@/app/coach/actions";
 import { parseCsv } from "@/lib/csv";
 
-type Opt = { id: string; name: string; sessionId: string | null };
+type SwingOpt = { id: string; label: string; hasDtl: boolean; hasFace: boolean };
+type Opt = { id: string; name: string; sessionId: string | null; swings: SwingOpt[] };
 const CACHE = "cj-share", PENDING = "/share/pending";
+const newPath = (userId: string, studentId: string, ext: string) => `${userId}/${studentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
 /** Reads the clip the service worker parked, lets the coach pick the student, uploads it. */
 export function SharePicker({ options, err }: { options: Opt[]; err: string | null }) {
@@ -15,7 +17,8 @@ export function SharePicker({ options, err }: { options: Opt[]; err: string | nu
   const [file, setFile] = useState<File | null | undefined>(undefined); // undefined = still looking
   const [studentId, setStudentId] = useState(options[0]?.id ?? "");
   const [club, setClub] = useState("7 Iron");
-  const [angle, setAngle] = useState<"Face-on" | "Down-the-line">("Face-on");
+  const [angle, setAngle] = useState<"Face-on" | "Down-the-line">("Down-the-line");
+  const [swingId, setSwingId] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(err === "nosw" ? "The app wasn't ready to receive the share. Open Coach Jay once, then share the clip again." : err === "nofile" ? "No video came through with that share." : err);
   const [preview, setPreview] = useState<string | null>(null);
@@ -37,6 +40,10 @@ export function SharePicker({ options, err }: { options: Opt[]; err: string | nu
   }, []);
 
   const chosen = options.find((o) => o.id === studentId);
+  // Default target: the newest swing still missing the view being added.
+  const swingTargets = chosen?.swings ?? [];
+  const defaultSwing = swingTargets.find((w) => (angle === "Down-the-line" ? !w.hasDtl : !w.hasFace))?.id ?? "";
+  const targetSwing = swingId || defaultSwing;
   const isCsv = !!file && (/\.csv$/i.test(file.name) || /csv|text\/plain/.test(file.type));
   const [csvText, setCsvText] = useState<string | null>(null);
   const [result, setResult] = useState<{ added: number; skipped: number } | null>(null);
@@ -61,11 +68,11 @@ export function SharePicker({ options, err }: { options: Opt[]; err: string | nu
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Signed out."); setBusy(false); return; }
     const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-    const path = `${user.id}/${chosen.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = newPath(user.id, chosen.id, ext);
     const contentType = file.type || (ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4");
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setBusy(false); return; }
-    const r = await registerVideo({ kind: "swing", student_id: chosen.id, session_id: chosen.sessionId, storage_path: path, title: `${club} · ${angle}` });
+    const r = await registerVideo({ kind: "swing", student_id: chosen.id, session_id: chosen.sessionId, storage_path: path, title: `${club} · ${angle}`, angle, swing_id: targetSwing === "new" || !targetSwing ? null : targetSwing });
     if (r.error) { setError(r.error); setBusy(false); return; }
     try { const cache = await caches.open(CACHE); await cache.delete(PENDING); } catch { /* fine */ }
     router.replace(chosen.sessionId ? `/coach/students/${chosen.id}/session` : `/coach/students/${chosen.id}?tab=swings`);
@@ -139,6 +146,16 @@ export function SharePicker({ options, err }: { options: Opt[]; err: string | nu
             ))}
           </div>
         </div>
+        {chosen?.sessionId && swingTargets.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="label" htmlFor="share-swing">Which swing is this the {angle.toLowerCase()} view of?</label>
+            <select id="share-swing" className="input" value={targetSwing} onChange={(e) => setSwingId(e.target.value)}>
+              {swingTargets.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+              <option value="new">A new swing (not recorded on the phone)</option>
+            </select>
+            <span className="text-xs text-ink3">Newest swing missing this view is picked for you.</span>
+          </div>
+        )}
         {error && <p role="alert" className="text-sm text-bad m-0">{error}</p>}
         <div className="flex gap-2 justify-end">
           <Link href="/coach" className="btn">Cancel</Link>

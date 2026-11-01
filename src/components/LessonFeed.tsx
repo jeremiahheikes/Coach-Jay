@@ -2,9 +2,8 @@
 import { useState } from "react";
 import { ReviewPlayer } from "./ReviewPlayer";
 import { DualPlayer } from "./DualPlayer";
-import { groupShotsByClip, avg, suggestPartner, type ClipGroup } from "@/lib/lesson";
+import { groupShotsBySwing, groupSwings, avg, type Swing, type SwingGroup } from "@/lib/lesson";
 import type { Shot, Video } from "@/lib/types";
-import { fmtDate } from "@/lib/types";
 
 const COLS = [
   { key: "carry", label: "Carry", unit: "yds", d: 0 },
@@ -20,73 +19,76 @@ const fmt = (v: number | null | undefined, d: number) => (v == null ? "–" : v.
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
 /**
- * The lesson as a scrolling feed: each clip, then the shots hit around it.
- * `openId` (optional) is the clip to start expanded, e.g. the one just recorded.
- * `clipExtra` renders under an expanded clip (the coach's note editor); `noteOf` shows a read-only note.
+ * The lesson as a scrolling feed: one entry per swing (face-on + down-the-line together when both
+ * exist), then the shots hit around it. `openId` is a clip id or swing id to start expanded.
  */
-export function LessonFeed({ clips, shots, openId, clipExtra, emptyText, library }: {
+export function LessonFeed({ clips, shots, openId, clipExtra, emptyText }: {
   clips: Video[]; shots: Shot[]; openId?: string | null;
   clipExtra?: (v: Video) => React.ReactNode; emptyText?: string;
-  /** Other clips that can be paired with (earlier swings); defaults to this lesson's clips. */
-  library?: Video[];
 }) {
-  const groups = groupShotsByClip(clips, shots);
+  const swings = groupSwings(clips);
+  const groups = groupShotsBySwing(swings, shots);
   const [open, setOpen] = useState<string | null | undefined>(undefined);
-  const [pair, setPair] = useState<{ a: Video; b: Video } | null>(null);
-  const openClip = open === undefined ? openId ?? null : open;
-  const pool = library ?? clips;
+  const openSwing = open === undefined ? (openId ? swings.find((s) => s.id === openId || s.clips.some((c) => c.id === openId))?.id ?? null : null) : open;
   if (groups.length === 0) return <div className="card text-ink2 text-sm">{emptyText ?? "Nothing in this lesson yet."}</div>;
   return (
     <div className="flex flex-col gap-3">
-      {pair && <DualPlayer left={pair.a} right={pair.b} key={pair.a.id + pair.b.id} onClose={() => setPair(null)} />}
-      {groups.map((g) => <ClipCard key={g.clip?.id ?? "warmup"} group={g} expanded={!!g.clip && g.clip.id === openClip} onToggle={() => g.clip && setOpen(g.clip.id === openClip ? null : g.clip.id)} extra={clipExtra}
-        partner={g.clip ? suggestPartner(g.clip, pool) : null} pool={pool} onPair={(a, b) => { setPair({ a, b }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />)}
+      {groups.map((g) => <SwingCard key={g.swing?.id ?? "warmup"} group={g} expanded={!!g.swing && g.swing.id === openSwing} onToggle={() => g.swing && setOpen(g.swing.id === openSwing ? null : g.swing.id)} extra={clipExtra} />)}
     </div>
   );
 }
 
-function ClipCard({ group, expanded, onToggle, extra, partner, pool, onPair }: { group: ClipGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode; partner: Video | null; pool: Video[]; onPair: (a: Video, b: Video) => void }) {
-  const { clip, shots } = group;
-  const [picking, setPicking] = useState(false);
-  const others = clip ? pool.filter((v) => v.id !== clip.id) : [];
+function SwingCard({ group, expanded, onToggle, extra }: { group: SwingGroup; expanded: boolean; onToggle: () => void; extra?: (v: Video) => React.ReactNode }) {
+  const { swing, shots } = group;
+  const [view, setView] = useState<"both" | "face" | "dtl">("both");
+  if (!swing) {
+    return (
+      <section className="card !p-0 overflow-hidden flex flex-col">
+        <div className="px-3 pt-3 flex items-baseline justify-between"><h3 className="text-base font-semibold">Warm-up shots</h3><span className="eyebrow">{shots.length} before the first swing</span></div>
+        {shots.length > 0 && <ShotTable shots={shots} />}
+      </section>
+    );
+  }
+  const both = !!(swing.faceOn && swing.dtl);
+  const single = swing.faceOn ?? swing.dtl ?? swing.clips[0]!;
+  const note = swing.clips.find((c) => c.coach_note)?.coach_note;
   return (
     <section className={`card !p-0 overflow-hidden flex flex-col ${expanded ? "border-accent" : ""}`}>
-      {clip ? (
-        expanded ? (
-          <div className="p-3 flex flex-col gap-3">
-            <ReviewPlayer video={clip} key={clip.id} onClose={onToggle}>
-              <div className="flex flex-wrap items-center gap-2">
-                {partner && <button className="btn btn-sm btn-primary" onClick={() => onPair(clip, partner)}>▶▶ View with {partner.title.split(" · ").pop()} ({time(partner.created_at)})</button>}
-                <button className="btn btn-sm" onClick={() => setPicking((p) => !p)} disabled={others.length === 0}>View with…</button>
-                {picking && (
-                  <select className="input !w-auto" defaultValue="" onChange={(e) => { const v = others.find((o) => o.id === e.target.value); if (v) { setPicking(false); onPair(clip, v); } }}>
-                    <option value="" disabled>Pick a clip</option>
-                    {others.map((o) => <option key={o.id} value={o.id}>{o.title} · {fmtDate(o.recorded_on)} {time(o.created_at)}</option>)}
-                  </select>
-                )}
-              </div>
-              {extra ? extra(clip) : clip.coach_note ? <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{clip.coach_note}</div> : null}
-            </ReviewPlayer>
-          </div>
-        ) : (
-          <button onClick={onToggle} className="flex items-center gap-3 p-3 text-left">
-            <span className="w-16 h-11 rounded-md bg-surface2 grid place-items-center shrink-0">
-              <span className="w-7 h-7 rounded-full bg-surface text-accent grid place-items-center shadow"><svg viewBox="0 0 24 24" className="w-3 h-3 ml-0.5" fill="currentColor"><path d="M7 5v14l12-7z" /></svg></span>
-            </span>
-            <span className="min-w-0 flex-1">
-              <b className="block font-semibold truncate">{clip.title}</b>
-              <span className="block text-xs text-ink3 truncate">{time(clip.created_at)} · {clip.coach_note || "No note yet"}</span>
-            </span>
-            <span className="text-xs text-ink3 whitespace-nowrap">{shots.length ? `${shots.length} shot${shots.length === 1 ? "" : "s"}` : "no shots"}</span>
-          </button>
-        )
+      {expanded ? (
+        <div className="p-3 flex flex-col gap-3">
+          {both && (
+            <div className="inline-flex bg-surface2 rounded-lg p-[3px] gap-0.5 self-start">
+              {([["both", "Both"], ["face", "Face-on"], ["dtl", "Down-the-line"]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setView(k)} className={`px-2.5 py-1 rounded-md text-sm font-semibold ${view === k ? "bg-surface text-ink shadow-sm" : "text-ink2"}`}>{l}</button>
+              ))}
+            </div>
+          )}
+          {both && view === "both" ? (
+            <DualPlayer left={swing.faceOn!} right={swing.dtl!} key={swing.id} onClose={onToggle} />
+          ) : (
+            <ReviewPlayer video={view === "dtl" && swing.dtl ? swing.dtl : view === "face" && swing.faceOn ? swing.faceOn : single} key={swing.id + view} onClose={onToggle} />
+          )}
+          {extra ? extra(single) : note ? <div className="bg-surface2 rounded-lg px-3 py-2.5 text-sm"><div className="eyebrow mb-0.5">Coach note</div>{note}</div> : null}
+          {!both && <p className="text-xs text-ink3 m-0">{swing.faceOn ? "No down-the-line view yet — share the GoPro clip and pick this swing." : "No face-on view yet."}</p>}
+        </div>
       ) : (
-        <div className="px-3 pt-3 flex items-baseline justify-between"><h3 className="text-base font-semibold">Warm-up shots</h3><span className="eyebrow">{shots.length} before the first clip</span></div>
+        <button onClick={onToggle} className="flex items-center gap-3 p-3 text-left">
+          <span className="w-16 h-11 rounded-md bg-surface2 grid place-items-center shrink-0">
+            <span className="w-7 h-7 rounded-full bg-surface text-accent grid place-items-center shadow"><svg viewBox="0 0 24 24" className="w-3 h-3 ml-0.5" fill="currentColor"><path d="M7 5v14l12-7z" /></svg></span>
+          </span>
+          <span className="min-w-0 flex-1">
+            <b className="block font-semibold truncate">{swing.title} <span className="font-normal text-ink3">· {both ? "2 views" : swing.dtl ? "down-the-line" : "face-on"}</span></b>
+            <span className="block text-xs text-ink3 truncate">{time(swing.at)} · {note || "No note yet"}</span>
+          </span>
+          <span className="text-xs text-ink3 whitespace-nowrap">{shots.length ? `${shots.length} shot${shots.length === 1 ? "" : "s"}` : "no shots"}</span>
+        </button>
       )}
       {shots.length > 0 && <ShotTable shots={shots} />}
     </section>
   );
 }
+
+export function swingLabel(s: Swing) { return `${s.title} · ${time(s.at)}${s.dtl ? " (has down-the-line)" : ""}`; }
 
 function ShotTable({ shots }: { shots: Shot[] }) {
   const clubs = [...new Set(shots.map((s) => s.club))];
