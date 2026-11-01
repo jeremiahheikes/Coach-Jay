@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { finishLesson, registerVideo, updateVideoNote, type ActionState } from "@/app/coach/actions";
-import { LessonFeed } from "@/components/LessonFeed";
+import { LessonFeed, swingLabel } from "@/components/LessonFeed";
+import { groupSwings } from "@/lib/lesson";
 import { ReviewPlayer } from "@/components/ReviewPlayer";
 import { SwingCamera } from "@/components/SwingCamera";
 import type { Session, Shot, Video } from "@/lib/types";
@@ -22,6 +23,12 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
   const [uploading, setUploading] = useState<{ name: string; pct: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [angle, setAngle] = useState<"Face-on" | "Down-the-line">("Face-on");
+  // Where a picked clip goes: a swing from this lesson still missing this angle, or a new swing.
+  const swings = groupSwings(clips);
+  const [attachTo, setAttachTo] = useState<string>("auto");
+  const candidates = swings.filter((w) => (angle === "Down-the-line" ? !w.dtl : !w.faceOn));
+  const autoTarget = candidates[0]?.id ?? null;
+  const targetSwing = attachTo === "auto" ? autoTarget : attachTo === "new" ? null : attachTo;
   const [club, setClub] = useState("7 Iron");
   const fileRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
@@ -33,7 +40,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
   // The clip just uploaded opens expanded; otherwise the newest one.
   const openId = (lastPath && clips.find((c) => c.storage_path === lastPath)?.id) || clips[0]?.id || null;
 
-  async function handleFile(file: File | null) {
+  async function handleFile(file: File | null, opts?: { swingId?: string | null }) {
     if (!file) return;
     setError(null);
     const supabase = createClient();
@@ -46,7 +53,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
-    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, angle, recorded_on: session.session_date });
+    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${angle}`, angle, swing_id: opts?.swingId ?? null, recorded_on: session.session_date });
     if (r.error) { setError(r.error); setUploading(null); return; }
     setLastPath(path);
     setUploading(null);
@@ -74,8 +81,16 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           <button className={`btn flex-1 min-w-[140px] !py-3 ${cameraOpen ? "" : "btn-primary"}`} disabled={!!uploading} onClick={() => setCameraOpen((o) => !o)}>{cameraOpen ? "Hide in-app camera" : "● In-app camera"}</button>
           <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Add slo-mo from gallery</button>
           <button className="btn flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => fileRef.current?.click()}>Phone camera app</button>
-          <input ref={fileRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-          <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+          <input ref={fileRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null, { swingId: targetSwing }); e.target.value = ""; }} />
+          <input ref={pickRef} type="file" accept="video/*" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null, { swingId: targetSwing }); e.target.value = ""; }} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="label" htmlFor="attach-to">Gallery clip goes to</label>
+          <select id="attach-to" className="input !w-auto" value={attachTo} onChange={(e) => setAttachTo(e.target.value)}>
+            <option value="auto">{autoTarget ? `Latest swing missing ${angle.toLowerCase()} (${swingLabel(candidates[0]!)})` : "A new swing"}</option>
+            {candidates.slice(1).map((w) => <option key={w.id} value={w.id}>{swingLabel(w)}</option>)}
+            <option value="new">A new swing</option>
+          </select>
         </div>
         {uploading && (
           <div className="flex flex-col gap-1">
