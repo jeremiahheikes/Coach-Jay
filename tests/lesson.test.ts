@@ -4,7 +4,7 @@ import { groupShotsByClip, LEAD_MS, avg } from "../src/lib/lesson";
 import type { Shot, Video } from "../src/lib/types";
 
 const clip = (id: string, at: string): Video => ({ id, kind: "swing", coach_id: "c", student_id: "s", storage_path: id, title: id, category: "", description: "", coach_note: "", recorded_on: at.slice(0, 10), duration_seconds: null, created_at: at, session_id: "x", swing_id: null, angle: null });
-const shot = (id: string, at: string, carry: number | null = 150): Shot => ({ id, session_id: "x", club: "7 Iron", hit_at: at, club_speed: null, ball_speed: null, smash_factor: null, launch_angle: null, launch_direction: null, spin_rate: null, spin_axis: null, face_angle: null, attack_angle: null, club_path: null, carry, total: null, side: null, apex: null, raw: null });
+const shot = (id: string, at: string, carry: number | null = 150): Shot => ({ id, session_id: "x", club: "7 Iron", hit_at: at, club_speed: null, ball_speed: null, smash_factor: null, launch_angle: null, launch_direction: null, spin_rate: null, spin_axis: null, face_angle: null, attack_angle: null, club_path: null, carry, total: null, side: null, apex: null, raw: null, provisional: false });
 
 const T = (s: number) => new Date(Date.UTC(2026, 9, 27, 17, 0, s)).toISOString();
 

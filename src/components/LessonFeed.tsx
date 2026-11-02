@@ -115,7 +115,7 @@ function ShotTable({ shots }: { shots: Shot[] }) {
         <thead><tr><th>#</th><th>Club</th>{COLS.map((c) => <th key={c.key} className="r">{c.label}{c.unit ? <span className="normal-case tracking-normal"> {c.unit}</span> : ""}</th>)}</tr></thead>
         <tbody>
           {shots.map((s, i) => (
-            <tr key={s.id}><td className="text-ink3">{i + 1}</td><td>{s.club}</td>{COLS.map((c) => <td key={c.key} className="r num">{fmt(s[c.key] as number | null, c.d)}</td>)}</tr>
+            <tr key={s.id} className={s.provisional ? "italic text-ink2" : ""}><td className="text-ink3">{i + 1}{s.provisional && <span title="Read off the bay screen — replaced by the official CSV at close-out"> *</span>}</td><td>{s.club}</td>{COLS.map((c) => <td key={c.key} className="r num">{fmt(s[c.key] as number | null, c.d)}</td>)}</tr>
           ))}
           {shots.length > 1 && (
             <tr className="font-semibold bg-surface2"><td /><td>Avg{clubs.length > 1 ? ` (${clubs.length} clubs)` : ""}</td>{COLS.map((c) => <td key={c.key} className="r num">{fmt(avg(shots, c.key), c.d)}</td>)}</tr>

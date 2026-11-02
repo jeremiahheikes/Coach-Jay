@@ -10,6 +10,7 @@ const ICONS = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
   chart: <path d="M4 20h16M6 16l4-5 3 3 5-7" />,
   cam: <><rect x="3" y="7" width="13" height="10" rx="2" /><path d="M16 10l5-2.5v9L16 14z" /></>,
+  screen: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
   live: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></>,
   radar: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 12l6-6" /></>,
 };

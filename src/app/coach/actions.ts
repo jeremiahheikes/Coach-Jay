@@ -136,6 +136,8 @@ export async function importCsvText(input: { student_id: string; text: string; f
     if (error) return { error: error.message };
     sessionId = session.id;
   }
+  // The CSV is the official record: drop anything read off the screen for this session.
+  await supabase.from("shots").delete().eq("session_id", sessionId).eq("provisional", true);
   // Skip shots already in this session (same hit time, to the second).
   const { data: have } = await supabase.from("shots").select("hit_at").eq("session_id", sessionId);
   const seen = new Set((have ?? []).map((r) => new Date(r.hit_at as string).toISOString().slice(0, 19)));
@@ -175,6 +177,50 @@ export async function announceSwing(input: { student_id: string; session_id: str
     coach_id: user.id, student_id: input.student_id, session_id: input.session_id, swing_id: input.swing_id, club: input.club, angle_needed: input.angle_needed ?? "Down-the-line",
   });
   return error ? { error: error.message } : { ok: true };
+}
+
+// ---------- Shots read off the bay screen ----------
+export type ScreenShotInput = {
+  student_id: string; club: string;
+  carry?: number | null; total?: number | null; ball_speed?: number | null; club_speed?: number | null;
+  smash_factor?: number | null; launch_angle?: number | null; spin_rate?: number | null; side?: number | null;
+  apex?: number | null; launch_direction?: number | null; spin_axis?: number | null; face_angle?: number | null;
+  attack_angle?: number | null; club_path?: number | null; confidence?: number; raw?: unknown;
+};
+
+/** Posts one provisional shot into the student's lesson in progress (opens one if needed). */
+export async function addScreenShot(input: ScreenShotInput): Promise<{ error?: string; ok?: boolean; sessionId?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Signed out." };
+  const { data: open } = await supabase.from("sessions").select("id").eq("student_id", input.student_id).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let sessionId = open?.id as string | undefined;
+  if (!sessionId) {
+    const { data: s, error } = await supabase.from("sessions").insert({
+      student_id: input.student_id, coach_id: user.id, session_date: new Date().toISOString().slice(0, 10), source: "screen", title: "Lesson", status: "open",
+    }).select("id").single();
+    if (error) return { error: error.message };
+    sessionId = s.id;
+  }
+  const n = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? null : v);
+  const smash = n(input.smash_factor) ?? (n(input.ball_speed) && n(input.club_speed) ? +(input.ball_speed! / input.club_speed!).toFixed(2) : null);
+  const { error } = await supabase.from("shots").insert({
+    session_id: sessionId, club: input.club || "Unknown", hit_at: new Date().toISOString(), provisional: true,
+    carry: n(input.carry), total: n(input.total), ball_speed: n(input.ball_speed), club_speed: n(input.club_speed), smash_factor: smash,
+    launch_angle: n(input.launch_angle), spin_rate: input.spin_rate == null ? null : Math.round(input.spin_rate), side: n(input.side), apex: n(input.apex),
+    launch_direction: n(input.launch_direction), spin_axis: n(input.spin_axis), face_angle: n(input.face_angle), attack_angle: n(input.attack_angle), club_path: n(input.club_path),
+    raw: { source: "screen", confidence: input.confidence ?? null, ...(typeof input.raw === "object" && input.raw ? input.raw : {}) },
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/coach/students/${input.student_id}`);
+  return { ok: true, sessionId };
+}
+
+/** Removes a provisional shot the coach judged to be a misread. */
+export async function deleteProvisionalShot(shot_id: string, student_id: string) {
+  const supabase = await createClient();
+  await supabase.from("shots").delete().eq("id", shot_id).eq("provisional", true);
+  revalidatePath(`/coach/students/${student_id}`);
 }
 
 // ---------- Videos ----------
