@@ -165,6 +165,18 @@ export async function importBaySession(_: ActionState, form: FormData): Promise<
   redirect(r.inLesson ? `/coach/students/${student_id}/session` : `/coach/students/${student_id}?tab=data`);
 }
 
+// ---------- Capture events (phone → GoPro helper) ----------
+/** The phone announces a captured swing so the laptop helper can fetch the other angle from the GoPro. */
+export async function announceSwing(input: { student_id: string; session_id: string | null; swing_id: string; club: string; angle_needed?: "Face-on" | "Down-the-line" }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Signed out." };
+  const { error } = await supabase.from("capture_events").insert({
+    coach_id: user.id, student_id: input.student_id, session_id: input.session_id, swing_id: input.swing_id, club: input.club, angle_needed: input.angle_needed ?? "Down-the-line",
+  });
+  return error ? { error: error.message } : { ok: true };
+}
+
 // ---------- Videos ----------
 /** Called after the browser has uploaded the file straight to Supabase Storage. */
 export async function registerVideo(input: { kind: "swing" | "lesson"; student_id?: string; session_id?: string | null; swing_id?: string | null; angle?: "Face-on" | "Down-the-line" | null; storage_path: string; title: string; category?: string; description?: string; coach_note?: string; recorded_on?: string; duration_seconds?: number | null }) {

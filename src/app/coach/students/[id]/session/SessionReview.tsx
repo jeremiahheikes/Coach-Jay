@@ -3,7 +3,7 @@ import { useActionState, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { finishLesson, registerVideo, updateVideoNote, type ActionState } from "@/app/coach/actions";
+import { announceSwing, finishLesson, registerVideo, updateVideoNote, type ActionState } from "@/app/coach/actions";
 import { LessonFeed, swingLabel } from "@/components/LessonFeed";
 import { groupSwings } from "@/lib/lesson";
 import { ReviewPlayer } from "@/components/ReviewPlayer";
@@ -40,9 +40,12 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
   // The clip just uploaded opens expanded; otherwise the newest one.
   const openId = (lastPath && clips.find((c) => c.storage_path === lastPath)?.id) || clips[0]?.id || null;
 
-  async function handleFile(file: File | null, opts?: { swingId?: string | null; angle?: "Face-on" | "Down-the-line" }) {
+  async function handleFile(file: File | null, opts?: { swingId?: string | null; angle?: "Face-on" | "Down-the-line"; announce?: boolean }) {
     if (!file) return;
     const useAngle = opts?.angle ?? angle;
+    // A fresh in-app capture starts a new swing: pick its id here so the GoPro helper can be told at once.
+    const swingId = opts?.swingId ?? (opts?.announce ? crypto.randomUUID() : null);
+    if (opts?.announce && swingId) announceSwing({ student_id: studentId, session_id: session.id, swing_id: swingId, club, angle_needed: useAngle === "Face-on" ? "Down-the-line" : "Face-on" }).catch(() => {});
     setError(null);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -54,7 +57,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
     const { error: upErr } = await supabase.storage.from("swings").upload(path, file, { contentType });
     if (upErr) { setError(upErr.message); setUploading(null); return; }
     setUploading({ name: file.name, pct: 100 });
-    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${useAngle}`, angle: useAngle, swing_id: opts?.swingId ?? null, recorded_on: session.session_date });
+    const r = await registerVideo({ kind: "swing", student_id: studentId, session_id: session.id, storage_path: path, title: `${club} · ${useAngle}`, angle: useAngle, swing_id: swingId, recorded_on: session.session_date });
     if (r.error) { setError(r.error); setUploading(null); return; }
     setLastPath(path);
     setUploading(null);
@@ -77,7 +80,7 @@ export function SessionReview({ studentId, studentName, session, clips, shots, e
           </div>
           <Link href={`/coach/students/${studentId}/log`} className="btn btn-sm ml-auto">+ Enter numbers</Link>
         </div>
-        {cameraOpen ? <SwingCamera onClip={handleFile} busy={!!uploading} /> : null}
+        {cameraOpen ? <SwingCamera onClip={(f) => handleFile(f, { announce: true })} busy={!!uploading} /> : null}
         <div className="flex flex-wrap gap-2">
           <button className={`btn flex-1 min-w-[140px] !py-3 ${cameraOpen ? "" : "btn-primary"}`} disabled={!!uploading} onClick={() => setCameraOpen((o) => !o)}>{cameraOpen ? "Hide in-app camera" : "● In-app camera"}</button>
           <button className="btn btn-primary flex-1 min-w-[140px] !py-3" disabled={!!uploading} onClick={() => pickRef.current?.click()}>Add slo-mo from gallery</button>

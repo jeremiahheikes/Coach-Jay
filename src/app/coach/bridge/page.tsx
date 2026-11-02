@@ -10,14 +10,13 @@ export default async function BridgePage() {
   ]);
   return (
     <>
-      <PageHeader title="KIT bridge" eyebrow="Full Swing KIT → live ball data" />
+      <PageHeader title="Laptop helpers" eyebrow="GoPro helper · Full Swing KIT bridge" />
       <div className="card flex flex-col gap-2 text-sm text-ink2">
-        <p className="m-0">The bridge is a small Windows program that runs on the laptop next to the KIT. It listens for each shot and sends it here. Before a lesson, arm the bridge with the student on the mat; every shot lands in their profile as they hit it.</p>
-        <ol className="m-0 pl-5 flex flex-col gap-1">
-          <li>Create a bridge token below and copy it. It is shown once.</li>
-          <li>On the laptop, run the bridge from the <code>bridge/</code> folder with that token (see its README).</li>
-          <li>Arm a student, then hit balls. Switch students between lessons.</li>
-        </ol>
+        <p className="m-0">Two small programs run on the laptop in the bay, both signed in with a token from this page (shown once when you create it).</p>
+        <ul className="m-0 pl-5 flex flex-col gap-1">
+          <li><b>GoPro helper</b> (<code>gopro/helper.py</code>): each time the phone saves a swing, it triggers the GoPro over the USB-C cable, pulls the clip and attaches it to that swing as the down-the-line view. See its README.</li>
+          <li><b>KIT bridge</b> (<code>bridge/</code>): sends each Full Swing KIT shot here live. Arm a student below so shots land in their lesson. Needs Full Swing SDK credentials.</li>
+        </ul>
       </div>
       <BridgePanel students={students.map((s) => ({ id: s.id, name: s.full_name }))} tokens={(tokens.data ?? []) as BridgeRow[]} />
     </>

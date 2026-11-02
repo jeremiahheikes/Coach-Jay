@@ -45,3 +45,5 @@ bridge/appsettings.json
 bridge/bin/
 bridge/obj/
 bridge/queue.jsonl
+gopro/config.json
+gopro/clips/
