@@ -110,7 +110,7 @@ export function ReviewPlayer({ video, onClose, children }: { video: Video; onClo
         {url ? (
           <video ref={ref} src={url} playsInline preload="auto" className="w-full h-full object-contain" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center", cursor: zoom > 1 ? "grab" : "pointer" }}
             onError={() => setSrc({ id: video.id, url: null, err: "The file uploaded but this browser can't play it. Try the Camera app button, or a different browser." })}
-            onLoadedMetadata={(e) => { const v = e.currentTarget; setDur(v.duration); v.playbackRate = speed; if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); }}
+            onLoadedMetadata={(e) => { const v = e.currentTarget; v.playbackRate = speed; if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); if (Number.isFinite(v.duration)) setDur(v.duration); else { const fix = () => { v.removeEventListener("seeked", fix); setDur(v.duration); v.currentTime = 0; }; v.addEventListener("seeked", fix); v.currentTime = 1e6; } }}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={(e) => { if (!playing) setT(e.currentTarget.currentTime); }}
             onEnded={() => { if (loop.on && loop.a != null && ref.current) { ref.current.currentTime = loop.a; ref.current.play(); } }} />
