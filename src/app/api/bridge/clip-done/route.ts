@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { authBridge } from "@/lib/bridge-auth";
+import { bridgeOr401 } from "@/lib/bridge-auth";
 
 /** POST /api/bridge/clip-done — registers an uploaded clip against the event's swing and closes the event. */
 export async function POST(req: NextRequest) {
-  const bridge = await authBridge(req);
-  if (!bridge) return NextResponse.json({ error: "Unknown bridge token" }, { status: 401 });
+  const bridge = await bridgeOr401(req);
+  if (bridge instanceof Response) return bridge;
   const b = await req.json().catch(() => ({})) as { event_id?: string; path?: string; error?: string };
   const admin = createAdminClient();
   if (!b.event_id) return NextResponse.json({ error: "event_id required" }, { status: 400 });
