@@ -157,12 +157,19 @@ class GoPro:
                 out.add(f"{d['d']}/{f['n']}")
         return out
 
-    def download(self, camera_file: str, local: Path) -> None:
-        with requests.get(f"{self.base}/videos/DCIM/{camera_file}", stream=True, timeout=120) as r:
-            r.raise_for_status()
-            with local.open("wb") as f:
-                for chunk in r.iter_content(1 << 20):
-                    f.write(chunk)
+    def download(self, camera_file: str, local: Path, wait_s: float = 20.0) -> None:
+        """The camera answers 503 while it's still finalising the file; keep asking until it's ready."""
+        deadline = time.time() + wait_s
+        while True:
+            with requests.get(f"{self.base}/videos/DCIM/{camera_file}", stream=True, timeout=120) as r:
+                if r.status_code == 503 and time.time() < deadline:
+                    time.sleep(0.5)
+                    continue
+                r.raise_for_status()
+                with local.open("wb") as f:
+                    for chunk in r.iter_content(1 << 20):
+                        f.write(chunk)
+                return
 
 
 def ffmpeg_exe() -> str | None:
