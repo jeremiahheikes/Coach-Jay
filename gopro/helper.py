@@ -111,6 +111,7 @@ class GoPro:
     def connect(self) -> None:
         self.get("/gopro/camera/control/wired_usb", p=1)   # take wired control
         self.keepalive(force=True)
+        log(self.why())
 
     def keepalive(self, force: bool = False) -> None:
         if force or time.time() - self.last_keepalive > KEEPALIVE_S:
@@ -121,7 +122,18 @@ class GoPro:
             self.last_keepalive = time.time()
 
     def shutter(self, on: bool) -> None:
-        self.get("/gopro/camera/shutter/" + ("start" if on else "stop"))
+        r = requests.get(self.base + "/gopro/camera/shutter/" + ("start" if on else "stop"), timeout=5)
+        if not r.ok:
+            raise RuntimeError(f"camera refused shutter {'start' if on else 'stop'} ({r.status_code} {r.text.strip()[:120]}); {self.why()}")
+
+    def why(self) -> str:
+        """A short readout of why the camera might be refusing: busy, encoding, SD card, mode."""
+        try:
+            st = self.get("/gopro/camera/state").json().get("status", {})
+        except Exception as e:  # noqa: BLE001
+            return f"state unavailable: {e}"
+        keys = {"8": "busy", "10": "encoding", "33": "sd", "43": "mode", "96": "preset", "97": "preset", "114": "ready", "115": "ready2"}
+        return "state: " + ", ".join(f"{keys.get(k, k)}={st[k]}" for k in keys if k in st)
 
     def files(self) -> set[str]:
         out: set[str] = set()
