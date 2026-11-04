@@ -71,6 +71,22 @@ if not ok:
     try_get("/gopro/camera/presets/load", id=0)
     time.sleep(2)
     ok = record_test("D: after loading preset 0 (video standard)")
+if not ok:
+    try_get("/gopro/camera/control/wired_usb", p=0)
+    time.sleep(2)
+    ok = record_test("E: after wired_usb=0")
+if not ok:
+    before = files()
+    try_get("/gp/gpControl/command/shutter", p=1)
+    time.sleep(2.5)
+    try_get("/gp/gpControl/command/shutter", p=0)
+    time.sleep(2)
+    new = sorted(files() - before); lines.append(f"    F legacy shutter new files: {new}"); ok = bool(new)
+if not ok:
+    try_get("/gopro/camera/control/wired_usb", p=1)
+    try_get("/gopro/camera/analytics/set_client_info")
+    time.sleep(1)
+    ok = record_test("G: after set_client_info")
 lines.append(f"RESULT: {'RECORDED' if ok else 'never recorded'}")
 out.write_text("\n".join(lines))
 print(f"\n{lines[-1]} — written to {out}")
