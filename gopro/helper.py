@@ -48,7 +48,12 @@ def log(msg: str) -> None:
 
 def load_config() -> dict:
     if not CONFIG.exists():
-        sys.exit(f"Missing {CONFIG}. Create it with: {{\"api\": \"https://coach-jay.vercel.app\", \"token\": \"cj_...\"}}")
+        print("First run. In Coach Jay go to Helpers, create a token, copy it, and paste it here.")
+        token = input("token (starts with cj_): ").strip()
+        if not token.startswith("cj_"):
+            sys.exit("That doesn't look like a Coach Jay token. Run me again.")
+        CONFIG.write_text(json.dumps({"api": "https://coach-jay.vercel.app", "token": token}, indent=2))
+        print(f"saved to {CONFIG}")
     cfg = json.loads(CONFIG.read_text())
     if not cfg.get("token", "").startswith("cj_"):
         sys.exit("config.json needs a bridge token from the Helpers page (starts with cj_).")
