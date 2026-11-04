@@ -47,3 +47,4 @@ bridge/obj/
 bridge/queue.jsonl
 gopro/config.json
 gopro/clips/
+__pycache__/
