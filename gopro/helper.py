@@ -111,6 +111,12 @@ class GoPro:
     def connect(self) -> None:
         self.get("/gopro/camera/control/wired_usb", p=1)   # take wired control
         self.keepalive(force=True)
+        st = self.get("/gopro/camera/state").json().get("status", {})
+        if st.get("115") == 1:
+            # The camera is showing its "USB connected" lock screen; in that state it won't record on
+            # command. Unplugging and replugging the cable clears it (the data link survives).
+            sys.exit("The GoPro is on its \"USB connected\" screen and won't record like that.\n"
+                     "Unplug the USB cable from the camera, plug it back in, wait 10 s, then run me again.")
         log(self.why())
 
     def keepalive(self, force: bool = False) -> None:
@@ -132,7 +138,7 @@ class GoPro:
             st = self.get("/gopro/camera/state").json().get("status", {})
         except Exception as e:  # noqa: BLE001
             return f"state unavailable: {e}"
-        keys = {"8": "busy", "10": "encoding", "33": "sd", "43": "mode", "96": "preset", "97": "preset", "114": "ready", "115": "ready2"}
+        keys = {"8": "busy", "10": "encoding", "33": "sd", "96": "group", "97": "preset", "114": "control", "115": "pc_locked"}
         return "state: " + ", ".join(f"{keys.get(k, k)}={st[k]}" for k in keys if k in st)
 
     def files(self) -> set[str]:
