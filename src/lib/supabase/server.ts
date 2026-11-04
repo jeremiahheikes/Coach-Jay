@@ -27,7 +27,7 @@ export async function createClient() {
 export function createAdminClient() {
   return createBareClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").replace(/\s+/g, ""), // pasted keys sometimes carry a stray line break
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }

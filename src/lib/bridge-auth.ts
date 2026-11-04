@@ -22,7 +22,7 @@ export async function authBridge(req: Request): Promise<Bridge | null> {
   const token_hash = createHash("sha256").update(token).digest("hex");
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set on the server");
   const { data, error } = await admin.from("bridge_tokens").select("id, coach_id, active_student_id, label").eq("token_hash", token_hash).maybeSingle();
-  if (error) throw new Error(`bridge_tokens lookup failed: ${error.message}`);
+  if (error) throw new Error(`bridge_tokens lookup failed (${error.code ?? "no code"}) — check SUPABASE_SERVICE_ROLE_KEY on the server`);
   if (!data) return null;
   await admin.from("bridge_tokens").update({ last_seen_at: new Date().toISOString() }).eq("id", data.id);
   return data as Bridge;
