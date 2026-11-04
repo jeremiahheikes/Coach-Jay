@@ -9,27 +9,29 @@ What it does, in a loop:
   3. Finds the new file on the camera, downloads it over the USB-C cable, uploads it straight to
      Coach Jay's storage and attaches it to the same swing as the phone's clip.
 
+Talks to the camera with GoPro's wired HTTP API (Open GoPro) over the USB-C cable — no Bluetooth,
+no Wi-Fi, no GoPro SDK. Only `requests` is needed.
+
 Setup (once):
-  pip install open-gopro requests
-  GoPro: USB-C to the laptop; on the camera enable Preferences → Connections → USB Connection → "GoPro Connect"
+  python -m pip install requests
+  GoPro: USB-C to the laptop; on the camera: Preferences → Connections → USB Connection → "GoPro Connect"
          (not MTP), and put the "jay" preset on with HindSight 15 s.
-  Coach Jay: KIT bridge page → create a token → paste it into config.json next to this file:
+  Coach Jay: Helpers page → create a token → paste it into config.json next to this file:
     { "api": "https://coach-jay.vercel.app", "token": "cj_..." }
+  (optional) "camera_ip": "172.2X.1YY.51" in config.json if auto-detection can't find the camera.
 
 Run:  python helper.py
 Stop: Ctrl+C
 """
 from __future__ import annotations
 
-import asyncio
 import json
+import socket
 import sys
 import time
 from pathlib import Path
 
 import requests
-from open_gopro import WiredGoPro
-from open_gopro.models import constants
 
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "config.json"
@@ -37,6 +39,7 @@ TMP = HERE / "clips"
 TAIL_S = 2.5          # keep recording this long after the phone heard impact
 POLL_S = 0.5          # how often to ask Coach Jay for new swings
 SETTLE_S = 1.5        # give the camera a moment to finish writing the file
+KEEPALIVE_S = 3.0     # GoPro wants a nudge every few seconds or it dozes off
 
 
 def log(msg: str) -> None:
@@ -48,7 +51,7 @@ def load_config() -> dict:
         sys.exit(f"Missing {CONFIG}. Create it with: {{\"api\": \"https://coach-jay.vercel.app\", \"token\": \"cj_...\"}}")
     cfg = json.loads(CONFIG.read_text())
     if not cfg.get("token", "").startswith("cj_"):
-        sys.exit("config.json needs a bridge token from the KIT bridge page (starts with cj_).")
+        sys.exit("config.json needs a bridge token from the Helpers page (starts with cj_).")
     cfg.setdefault("api", "https://coach-jay.vercel.app")
     return cfg
 
@@ -76,16 +79,69 @@ class CoachJay:
         requests.post(f"{self.base}/api/bridge/clip-done", headers=self.h, json={"event_id": event_id, "path": path, "error": error}, timeout=10).raise_for_status()
 
 
-async def capture(gopro: WiredGoPro, cj: CoachJay, ev: dict) -> None:
+class GoPro:
+    """The camera over the USB cable. Its address is 172.2X.1YY.51 (X/YY from the serial number);
+    the laptop's USB network adapter gets 172.2X.1YY.5x from the camera, so we find it from there."""
+
+    def __init__(self, ip: str | None = None):
+        self.ip = ip or self.find()
+        self.base = f"http://{self.ip}:8080"
+        self.last_keepalive = 0.0
+
+    @staticmethod
+    def find() -> str:
+        addrs = {info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
+        for a in sorted(addrs):
+            p = a.split(".")
+            if p[0] == "172" and p[1].startswith("2") and p[2].startswith("1"):
+                return ".".join(p[:3] + ["51"])
+        sys.exit("Can't find the GoPro's USB network. Is the cable in, the camera on, and USB Connection set to \"GoPro Connect\"?\n"
+                 "If it is, add \"camera_ip\": \"172.2X.1YY.51\" to config.json (X = 3rd-from-last digit of the serial, YY = last two).")
+
+    def get(self, path: str, timeout: float = 5.0, **params) -> requests.Response:
+        r = requests.get(self.base + path, params=params or None, timeout=timeout)
+        r.raise_for_status()
+        return r
+
+    def connect(self) -> None:
+        self.get("/gopro/camera/control/wired_usb", p=1)   # take wired control
+        self.keepalive(force=True)
+
+    def keepalive(self, force: bool = False) -> None:
+        if force or time.time() - self.last_keepalive > KEEPALIVE_S:
+            try:
+                self.get("/gopro/camera/keep_alive")
+            except requests.RequestException:
+                pass
+            self.last_keepalive = time.time()
+
+    def shutter(self, on: bool) -> None:
+        self.get("/gopro/camera/shutter/" + ("start" if on else "stop"))
+
+    def files(self) -> set[str]:
+        out: set[str] = set()
+        for d in self.get("/gopro/media/list").json().get("media", []):
+            for f in d.get("fs", []):
+                out.add(f"{d['d']}/{f['n']}")
+        return out
+
+    def download(self, camera_file: str, local: Path) -> None:
+        with requests.get(f"{self.base}/videos/DCIM/{camera_file}", stream=True, timeout=120) as r:
+            r.raise_for_status()
+            with local.open("wb") as f:
+                for chunk in r.iter_content(1 << 20):
+                    f.write(chunk)
+
+
+def capture(gopro: GoPro, cj: CoachJay, ev: dict) -> None:
     """Record TAIL_S more (HindSight supplies the swing itself), fetch the new file, send it up."""
-    before = {f.filename for f in (await gopro.http_command.get_media_list()).data.files}
+    before = gopro.files()
     log(f"swing {ev['swing_id'][:8]} — recording")
-    assert (await gopro.http_command.set_shutter(shutter=constants.Toggle.ENABLE)).ok
-    await asyncio.sleep(TAIL_S)
-    assert (await gopro.http_command.set_shutter(shutter=constants.Toggle.DISABLE)).ok
-    await asyncio.sleep(SETTLE_S)
-    after = {f.filename for f in (await gopro.http_command.get_media_list()).data.files}
-    new = sorted(after - before)
+    gopro.shutter(True)
+    time.sleep(TAIL_S)
+    gopro.shutter(False)
+    time.sleep(SETTLE_S)
+    new = sorted(gopro.files() - before)
     if not new:
         cj.done(ev["id"], None, "camera produced no file (is HindSight / video mode on?)")
         log("no new file on the camera")
@@ -94,7 +150,7 @@ async def capture(gopro: WiredGoPro, cj: CoachJay, ev: dict) -> None:
     TMP.mkdir(exist_ok=True)
     local = TMP / f"{ev['swing_id']}.mp4"
     t0 = time.time()
-    await gopro.http_command.download_file(camera_file=camera_file, local_file=local)
+    gopro.download(camera_file, local)
     log(f"downloaded {camera_file} ({local.stat().st_size // 1_000_000} MB) in {time.time() - t0:.1f}s")
     t1 = time.time()
     path = cj.upload(ev["student_id"], local)
@@ -106,34 +162,38 @@ async def capture(gopro: WiredGoPro, cj: CoachJay, ev: dict) -> None:
         pass
 
 
-async def main() -> None:
+def main() -> None:
     cfg = load_config()
     cj = CoachJay(cfg)
-    log("connecting to the GoPro over USB…")
-    async with WiredGoPro() as gopro:
-        assert (await gopro.http_command.set_keep_alive()).ok
-        log("GoPro connected. Waiting for swings from the phone (Ctrl+C to stop).")
-        backoff = POLL_S
-        while True:
-            try:
-                for ev in cj.events():
+    log("looking for the GoPro on the USB cable…")
+    gopro = GoPro(cfg.get("camera_ip"))
+    try:
+        gopro.connect()
+    except requests.RequestException as e:
+        sys.exit(f"Found the USB network at {gopro.ip} but the camera didn't answer: {e}\nOn the camera check Preferences → Connections → USB Connection → \"GoPro Connect\".")
+    log(f"GoPro connected at {gopro.ip}. Waiting for swings from the phone (Ctrl+C to stop).")
+    backoff = POLL_S
+    while True:
+        gopro.keepalive()
+        try:
+            for ev in cj.events():
+                try:
+                    capture(gopro, cj, ev)
+                except Exception as e:  # noqa: BLE001
+                    log(f"capture failed: {e!r}")
                     try:
-                        await capture(gopro, cj, ev)
-                    except Exception as e:  # noqa: BLE001
-                        log(f"capture failed: {e!r}")
-                        try:
-                            cj.done(ev["id"], None, repr(e))
-                        except Exception:  # noqa: BLE001
-                            pass
-                backoff = POLL_S
-            except requests.RequestException as e:
-                log(f"Coach Jay unreachable: {e}; retrying")
-                backoff = min(backoff * 2, 10)
-            await asyncio.sleep(backoff)
+                        cj.done(ev["id"], None, repr(e))
+                    except Exception:  # noqa: BLE001
+                        pass
+            backoff = POLL_S
+        except requests.RequestException as e:
+            log(f"Coach Jay unreachable: {e}; retrying")
+            backoff = min(backoff * 2, 10)
+        time.sleep(backoff)
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         print("\nbye")

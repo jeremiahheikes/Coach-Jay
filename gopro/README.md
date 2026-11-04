@@ -6,7 +6,7 @@ attaches it to the same swing in Coach Jay. Both views land on the student's scr
 
 ## One-time setup (Windows)
 1. Install Python 3.11+ from python.org (tick "Add to PATH"). Then in PowerShell:
-   `pip install open-gopro requests`
+   `python -m pip install requests`
 2. GoPro: Preferences → Connections → USB Connection → **GoPro Connect**. Use the "jay" preset
    (1080p120, Linear, HindSight 15 s). Plug the USB-C cable into the laptop.
 3. Coach Jay → KIT bridge → create a token (label it "GoPro helper"). Save it as `config.json`
