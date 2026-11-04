@@ -13,7 +13,7 @@ Talks to the camera with GoPro's wired HTTP API (Open GoPro) over the USB-C cabl
 no Wi-Fi, no GoPro SDK. Only `requests` is needed.
 
 Setup (once):
-  python -m pip install requests
+  python -m pip install requests imageio-ffmpeg
   GoPro: USB-C to the laptop; on the camera: Preferences → Connections → USB Connection → "GoPro Connect"
          (not MTP), and put the "jay" preset on with HindSight 15 s.
   Coach Jay: Helpers page → create a token → paste it into config.json next to this file:
@@ -26,7 +26,9 @@ Stop: Ctrl+C
 from __future__ import annotations
 
 import json
+import shutil
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -40,6 +42,8 @@ TAIL_S = 2.5          # keep recording this long after the phone heard impact
 POLL_S = 0.5          # how often to ask Coach Jay for new swings
 SETTLE_S = 1.5        # give the camera a moment to finish writing the file
 KEEPALIVE_S = 3.0     # GoPro wants a nudge every few seconds or it dozes off
+KEEP_S = 6.0          # seconds of the clip to upload (the swing is in the last few seconds of HindSight)
+HINDSIGHT_OPTION = 2  # setting 167: 2 = 15 s, 3 = 30 s, 4 = off
 
 
 def log(msg: str) -> None:
@@ -117,6 +121,11 @@ class GoPro:
             # command. Unplugging and replugging the cable clears it (the data link survives).
             sys.exit("The GoPro is on its \"USB connected\" screen and won't record like that.\n"
                      "Unplug the USB cable from the camera, plug it back in, wait 10 s, then run me again.")
+        try:
+            self.get("/gopro/camera/setting", setting=167, option=HINDSIGHT_OPTION)
+            log("HindSight set to 15 s")
+        except requests.RequestException as e:
+            log(f"couldn't turn HindSight on from here ({e}); turn it on in the preset on the camera")
         log(self.why())
 
     def keepalive(self, force: bool = False) -> None:
@@ -156,6 +165,26 @@ class GoPro:
                     f.write(chunk)
 
 
+def ffmpeg_exe() -> str | None:
+    try:
+        import imageio_ffmpeg  # type: ignore
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # noqa: BLE001
+        return shutil.which("ffmpeg")
+
+
+def trim(src: Path, dst: Path) -> bool:
+    """Keep the last KEEP_S seconds, shrink to 720p at a modest bitrate so the upload is a few MB.
+    Frame rate is kept, so slow-motion still works in the app. Returns False if ffmpeg isn't available."""
+    exe = ffmpeg_exe()
+    if not exe:
+        return False
+    cmd = [exe, "-y", "-loglevel", "error", "-sseof", f"-{KEEP_S}", "-i", str(src), "-vf", "scale=-2:720",
+           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "27", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", str(dst)]
+    subprocess.run(cmd, check=True, timeout=120)
+    return dst.exists() and dst.stat().st_size > 0
+
+
 def capture(gopro: GoPro, cj: CoachJay, ev: dict) -> None:
     """Record TAIL_S more (HindSight supplies the swing itself), fetch the new file, send it up."""
     before = gopro.files()
@@ -175,6 +204,17 @@ def capture(gopro: GoPro, cj: CoachJay, ev: dict) -> None:
     t0 = time.time()
     gopro.download(camera_file, local)
     log(f"downloaded {camera_file} ({local.stat().st_size // 1_000_000} MB) in {time.time() - t0:.1f}s")
+    t1 = time.time()
+    small = TMP / f"{ev['swing_id']}-small.mp4"
+    try:
+        if trim(local, small):
+            log(f"trimmed to last {KEEP_S:.0f}s ({small.stat().st_size // 1_000_000} MB) in {time.time() - t1:.1f}s")
+            local.unlink(missing_ok=True)
+            local = small
+        else:
+            log("ffmpeg not found — uploading the whole clip (run: python -m pip install imageio-ffmpeg)")
+    except Exception as e:  # noqa: BLE001
+        log(f"trim failed ({e!r}) — uploading the whole clip")
     t1 = time.time()
     path = cj.upload(ev["student_id"], local)
     cj.done(ev["id"], path)
