@@ -42,6 +42,7 @@ TAIL_S = 2.5          # keep recording this long after the phone heard impact
 POLL_S = 0.5          # how often to ask Coach Jay for new swings
 SETTLE_S = 1.5        # give the camera a moment to finish writing the file
 KEEPALIVE_S = 3.0     # GoPro wants a nudge every few seconds or it dozes off
+STALE_S = 12.0        # a swing event older than this can't be captured any more (HindSight is 15 s)
 KEEP_S = 6.0          # seconds of the clip to upload (the swing is in the last few seconds of HindSight)
 HINDSIGHT_OPTION = 2  # setting 167: 2 = 15 s, 3 = 30 s, 4 = off
 
@@ -150,6 +151,25 @@ class GoPro:
         keys = {"8": "busy", "10": "encoding", "33": "sd", "96": "group", "97": "preset", "114": "control", "115": "pc_locked"}
         return "state: " + ", ".join(f"{keys.get(k, k)}={st[k]}" for k in keys if k in st)
 
+    def hindsight(self, on: bool) -> None:
+        try:
+            self.get("/gopro/camera/setting", setting=167, option=HINDSIGHT_OPTION if on else 4)
+        except requests.RequestException as e:
+            log(f"couldn't switch HindSight {'on' if on else 'off'}: {e}")
+
+    def wait_idle(self, timeout_s: float = 20.0) -> bool:
+        """Wait until the camera is neither busy nor encoding (it won't serve files before then)."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            try:
+                st = self.get("/gopro/camera/state").json().get("status", {})
+                if not st.get("8") and not st.get("10"):
+                    return True
+            except requests.RequestException:
+                pass
+            time.sleep(0.3)
+        return False
+
     def files(self) -> set[str]:
         out: set[str] = set()
         for d in self.get("/gopro/media/list").json().get("media", []):
@@ -180,6 +200,18 @@ def ffmpeg_exe() -> str | None:
         return shutil.which("ffmpeg")
 
 
+def ensure_ffmpeg() -> None:
+    """First run: fetch the small bundled ffmpeg so clips can be trimmed before upload."""
+    if ffmpeg_exe():
+        return
+    log("installing the video trimmer (one time)…")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q", "imageio-ffmpeg"], check=True, timeout=300)
+        log("trimmer installed" if ffmpeg_exe() else "trimmer install didn't take; clips will upload untrimmed")
+    except Exception as e:  # noqa: BLE001
+        log(f"trimmer install failed ({e}); clips will upload untrimmed")
+
+
 def trim(src: Path, dst: Path) -> bool:
     """Keep the last KEEP_S seconds, shrink to 720p at a modest bitrate so the upload is a few MB.
     Frame rate is kept, so slow-motion still works in the app. Returns False if ffmpeg isn't available."""
@@ -192,6 +224,21 @@ def trim(src: Path, dst: Path) -> bool:
     return dst.exists() and dst.stat().st_size > 0
 
 
+def event_age(ev: dict) -> float:
+    """Seconds since the phone announced this swing (created_at is ISO-8601 from Postgres)."""
+    raw = ev.get("created_at")
+    if not raw:
+        return 0.0
+    try:
+        from datetime import datetime, timezone
+        t = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - t).total_seconds())
+    except ValueError:
+        return 0.0
+
+
 def capture(gopro: GoPro, cj: CoachJay, ev: dict) -> None:
     """Record TAIL_S more (HindSight supplies the swing itself), fetch the new file, send it up."""
     before = gopro.files()
@@ -199,18 +246,31 @@ def capture(gopro: GoPro, cj: CoachJay, ev: dict) -> None:
     gopro.shutter(True)
     time.sleep(TAIL_S)
     gopro.shutter(False)
-    time.sleep(SETTLE_S)
-    new = sorted(gopro.files() - before)
-    if not new:
-        cj.done(ev["id"], None, "camera produced no file (is HindSight / video mode on?)")
-        log("no new file on the camera")
+    # With HindSight on the camera never stops encoding, and it refuses to serve files while it
+    # encodes (503). So: HindSight off, wait for idle, grab the file, HindSight back on.
+    gopro.hindsight(False)
+    try:
+        if not gopro.wait_idle():
+            log("camera stayed busy; trying the download anyway")
+        time.sleep(SETTLE_S)
+        new = sorted(gopro.files() - before)
+        if not new:
+            cj.done(ev["id"], None, "camera produced no file (is it in video mode?)")
+            log("no new file on the camera")
+            return
+        camera_file = new[-1]
+        TMP.mkdir(exist_ok=True)
+        local = TMP / f"{ev['swing_id']}.mp4"
+        t0 = time.time()
+        gopro.download(camera_file, local)
+        log(f"downloaded {camera_file} ({local.stat().st_size // 1_000_000} MB) in {time.time() - t0:.1f}s")
+    finally:
+        gopro.hindsight(True)
+    if local.stat().st_size < 100_000:
+        cj.done(ev["id"], None, "camera file was empty")
+        log("camera file was empty — skipped")
+        local.unlink(missing_ok=True)
         return
-    camera_file = new[-1]
-    TMP.mkdir(exist_ok=True)
-    local = TMP / f"{ev['swing_id']}.mp4"
-    t0 = time.time()
-    gopro.download(camera_file, local)
-    log(f"downloaded {camera_file} ({local.stat().st_size // 1_000_000} MB) in {time.time() - t0:.1f}s")
     t1 = time.time()
     small = TMP / f"{ev['swing_id']}-small.mp4"
     try:
@@ -241,6 +301,7 @@ def main() -> None:
         gopro.connect()
     except requests.RequestException as e:
         sys.exit(f"Found the USB network at {gopro.ip} but the camera didn't answer: {e}\nOn the camera check Preferences → Connections → USB Connection → \"GoPro Connect\".")
+    ensure_ffmpeg()
     log(f"GoPro connected at {gopro.ip}. Waiting for swings from the phone (Ctrl+C to stop).")
     backoff = POLL_S
     while True:
@@ -248,6 +309,11 @@ def main() -> None:
         try:
             for ev in cj.events():
                 try:
+                    age = event_age(ev)
+                    if age > STALE_S:
+                        log(f"swing {ev['swing_id'][:8]} — {age:.0f}s old, camera was busy; skipped")
+                        cj.done(ev["id"], None, f"camera was busy with the previous swing ({age:.0f}s late)")
+                        continue
                     capture(gopro, cj, ev)
                 except Exception as e:  # noqa: BLE001
                     log(f"capture failed: {e!r}")
