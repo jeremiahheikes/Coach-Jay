@@ -26,7 +26,7 @@ export function NavLinks({ items, variant }: { items: NavItem[]; variant: "side"
           ? `flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-medium ${on ? "bg-accent-soft text-accent font-semibold" : "text-ink2 hover:bg-surface2"}`
           : `flex-1 flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium rounded-lg ${on ? "text-accent" : "text-ink3"}`;
         return (
-          <Link key={it.href} href={it.href} className={cls} aria-current={on ? "page" : undefined}>
+          <Link key={it.href} href={it.href} prefetch={true} className={cls} aria-current={on ? "page" : undefined}>
             <svg viewBox="0 0 24 24" className={variant === "side" ? "w-[18px] h-[18px]" : "w-[22px] h-[22px]"} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{ICONS[it.icon]}</svg>
             <span>{it.label}</span>
           </Link>
