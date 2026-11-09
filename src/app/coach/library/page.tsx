@@ -5,8 +5,7 @@ import { LessonUpload } from "./LessonUpload";
 
 export default async function LibraryPage() {
   const { supabase } = await requireUser();
-  const lessons = await listLessons();
-  const { data: counts } = await supabase.from("assignments").select("video_id");
+  const [lessons, { data: counts }] = await Promise.all([listLessons(), supabase.from("assignments").select("video_id")]);
   const assignedCount = new Map<string, number>();
   for (const a of counts ?? []) assignedCount.set(a.video_id, (assignedCount.get(a.video_id) ?? 0) + 1);
   const cats = [...new Set(lessons.map((l) => l.category || "Uncategorized"))];

@@ -25,7 +25,11 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims verifies the JWT locally (and refreshes the cookie when it's near expiry) instead of a
+  // round trip to the Auth server on every page, which was most of the delay when switching tabs.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  const user = claims?.sub ? { user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown> } : null;
   const path = request.nextUrl.pathname;
   const isPublic = path === "/login" || path === "/signup" || path.startsWith("/auth/") || path.startsWith("/api/ingest/") || path.startsWith("/api/bridge/") || path === "/share";
 

@@ -1,14 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Assignment, ClubAverage, Profile, Session, Shot, Student, Video } from "@/lib/types";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
-export async function requireUser() {
+export type SessionUser = { id: string; email: string | null };
+
+/**
+ * Who's signed in, plus their profile and a Supabase client. Memoised per request (React `cache`),
+ * so the layout, the page and every data helper share one auth check and one profile query
+ * instead of each paying for their own round trips.
+ *
+ * `getClaims` verifies the session JWT locally (keys are cached) rather than calling the Auth
+ * server on every request like `getUser` does; the proxy has already refreshed the cookie.
+ */
+export const requireUser = cache(async () => {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) redirect("/login");
+  const user: SessionUser = { id: claims.sub, email: (claims.email as string | undefined) ?? null };
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   return { supabase, user, profile: profile as Profile };
-}
+});
 
 export async function listStudents(): Promise<Student[]> {
   const { supabase } = await requireUser();
@@ -23,11 +36,11 @@ export async function getStudent(id: string): Promise<Student | null> {
 }
 
 /** The signed-in student's own roster row (students are linked by email at signup). */
-export async function getMyStudentRow(): Promise<Student | null> {
+export const getMyStudentRow = cache(async (): Promise<Student | null> => {
   const { supabase, user } = await requireUser();
   const { data } = await supabase.from("students").select("*").eq("user_id", user.id).limit(1).maybeSingle();
   return (data as Student) ?? null;
-}
+});
 
 export async function getStudentBundle(studentId: string) {
   const { supabase } = await requireUser();

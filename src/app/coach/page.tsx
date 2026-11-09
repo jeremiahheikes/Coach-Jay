@@ -6,8 +6,7 @@ import { AddStudentForm } from "./AddStudentForm";
 
 export default async function StudentsPage() {
   const { supabase } = await requireUser();
-  const students = await listStudents();
-  const { data: avgRows } = await supabase.from("session_club_averages").select("*").order("session_date");
+  const [students, { data: avgRows }] = await Promise.all([listStudents(), supabase.from("session_club_averages").select("*").order("session_date")]);
   const byStudent = new Map<string, ClubAverage[]>();
   for (const r of (avgRows ?? []) as ClubAverage[]) byStudent.set(r.student_id, [...(byStudent.get(r.student_id) ?? []), r]);
 
