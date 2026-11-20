@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Refreshes the Supabase session cookie on every request and gates the app:
- *  - signed out  -> /login
+ *  - signed out  -> /login (except public pages: the front page "/", login, signup)
  *  - coach       -> /coach/*
  *  - student     -> /student/*
  */
@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
   const claims = claimsData?.claims;
   const user = claims?.sub ? { user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown> } : null;
   const path = request.nextUrl.pathname;
-  const isPublic = path === "/login" || path === "/signup" || path.startsWith("/auth/") || path.startsWith("/api/ingest/") || path.startsWith("/api/bridge/") || path === "/share";
+  const isPublic = path === "/" || path === "/login" || path === "/signup" || path.startsWith("/auth/") || path.startsWith("/api/ingest/") || path.startsWith("/api/bridge/") || path === "/share";
 
   if (!user) {
     if (isPublic) return response;
