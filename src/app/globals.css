@@ -16,6 +16,16 @@
   }
 }
 
+/* Marketing pages stay bright in dark mode too (front page). */
+.theme-light {
+  color-scheme: light;
+  --bg: #f5f4ee; --surface: #ffffff; --surface2: #ecebe3; --line: #d9d8ce;
+  --ink: #1b211d; --ink2: #5e6b63; --ink3: #8a948d;
+  --accent: #1f4d3a; --accent-ink: #f5f4ee; --accent-soft: #dde8e1;
+  --good: #2e7d4f; --warn: #c48a1a; --bad: #b8452b;
+  background: var(--surface); color: var(--ink);
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

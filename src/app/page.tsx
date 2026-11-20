@@ -21,7 +21,7 @@ export default function FrontPage() {
   const loc = SITE.location;
   const q = encodeURIComponent(loc.address || loc.mapQuery);
   return (
-    <div className="flex flex-col bg-surface">
+    <div className="theme-light flex flex-col flex-1">
       {/* Top bar */}
       <header className="sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-line">
         <div className="max-w-5xl mx-auto px-4 md:px-8 h-14 flex items-center gap-3">
@@ -84,7 +84,7 @@ export default function FrontPage() {
       {/* Coach story */}
       <section className="bg-bg border-y border-line">
         <div className="max-w-5xl mx-auto px-4 md:px-8 py-14 grid md:grid-cols-[auto_1fr] gap-8 items-center">
-          <Image src="/welcome/coach-jay-headshot.jpg" alt="" width={480} height={480} className="w-40 h-40 md:w-52 md:h-52 rounded-2xl object-cover justify-self-center" />
+          <Image src="/welcome/coach-jay-headshot.jpg" alt="" width={480} height={480} className="w-40 h-40 md:w-52 md:h-52 rounded-full object-cover border-[6px] border-surface shadow-lg justify-self-center" />
           <div className="flex flex-col gap-3">
             <div className="eyebrow">Meet your coach</div>
             <h2 className="text-3xl md:text-4xl font-bold">Coach Jay — Jeremiah Heikes</h2>
