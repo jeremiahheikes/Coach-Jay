@@ -9,7 +9,10 @@ export const CLUBS = [
 
 export const LESSON_CATEGORIES = ["Fundamentals", "Irons", "Driver", "Short game", "Data", "Playing"] as const;
 
-export type Profile = { id: string; role: Role; full_name: string };
+export type Profile = {
+  id: string; role: Role; full_name: string;
+  about?: string; home_course?: string; agreed_rules_at?: string | null; banned_at?: string | null; created_at?: string;
+};
 
 export type Student = {
   id: string; coach_id: string; user_id: string | null;
@@ -44,6 +47,7 @@ export type Video = {
   storage_path: string; title: string; category: string; description: string;
   coach_note: string; recorded_on: string; duration_seconds: number | null; created_at: string;
   session_id: string | null; swing_id: string | null; angle: "Face-on" | "Down-the-line" | null;
+  is_free?: boolean;
 };
 
 export type Assignment = { id: string; video_id: string; student_id: string; assigned_at: string; watched_at: string | null };
