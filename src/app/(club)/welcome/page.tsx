@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { AskIcon, ClubhouseIcon, HeroArt, ProgressIcon } from "@/components/club/WelcomeArt";
 import { getMyStudentRow, requireUser } from "@/lib/data";
 import { getStartedStatus, listFreeTips, listPosts, ago } from "@/lib/club";
 import { VideoGrid } from "@/components/Video";
@@ -32,7 +34,8 @@ export default async function WelcomePage() {
         </div>
       )}
 
-      <header className="rounded-xl bg-accent text-accent-ink p-5 md:p-6 flex flex-col gap-2">
+      <header className="rounded-xl bg-accent text-accent-ink p-5 md:p-6 grid md:grid-cols-[1fr_minmax(0,300px)] gap-4 items-center overflow-hidden">
+        <div className="flex flex-col gap-2">
         <span className="eyebrow !text-accent-ink opacity-80">Coach Jay · Back Nine Golf, North Arlington</span>
         <h1 className="text-3xl md:text-4xl font-bold">Welcome, {first}.</h1>
         <p className="m-0 opacity-90 max-w-xl">
@@ -43,6 +46,8 @@ export default async function WelcomePage() {
           <Link href="/community" className="btn !bg-accent-ink !text-accent !border-transparent">Enter the Clubhouse →</Link>
           {!isStudent && !isCoach && <a href="#book" className="btn !bg-transparent !text-accent-ink !border-accent-ink/40">Book a lesson</a>}
         </div>
+        </div>
+        <HeroArt className="w-full max-w-[300px] justify-self-center md:justify-self-end -mb-5 md:-mb-6" />
       </header>
 
       {!isCoach && (
@@ -70,7 +75,7 @@ export default async function WelcomePage() {
       )}
 
       <section className="card flex flex-col md:flex-row gap-4">
-        <div className="w-16 h-16 rounded-xl bg-accent text-accent-ink grid place-items-center font-display font-bold text-3xl shrink-0">J</div>
+        <Image src="/welcome/coach-jay-headshot.jpg" alt="Coach Jay (Jeremiah Heikes)" width={240} height={240} className="w-28 h-28 md:w-32 md:h-32 rounded-full object-cover border-4 border-accent-soft shrink-0 self-center md:self-start" />
         <div className="flex flex-col gap-2">
           <div className="eyebrow">Meet your coach</div>
           <h2 className="text-xl font-bold">Coach Jay — Jeremiah Heikes</h2>
@@ -90,17 +95,17 @@ export default async function WelcomePage() {
         <h2 className="text-xl font-bold">How the app works</h2>
         <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
           <Link href="/community" className="card hover:border-accent flex flex-col gap-1">
-            <span className="chip chip-accent self-start">Free</span>
+            <div className="flex items-center justify-between"><ClubhouseIcon className="w-10 h-10 text-accent" /><span className="chip chip-accent">Free</span></div>
             <b className="font-display text-lg">The Clubhouse</b>
             <span className="text-sm text-ink2">Post range wins and swing clips, chat by topic, and find a foursome.</span>
           </Link>
           <Link href="/community/ask" className="card hover:border-accent flex flex-col gap-1">
-            <span className="chip chip-accent self-start">Free</span>
+            <div className="flex items-center justify-between"><AskIcon className="w-10 h-10 text-accent" /><span className="chip chip-accent">Free</span></div>
             <b className="font-display text-lg">Ask the Coach</b>
             <span className="text-sm text-ink2">Ask Coach Jay a question, with a clip if you have one. Answers are public, so everyone learns.</span>
           </Link>
           <div className="card flex flex-col gap-1">
-            <span className="chip self-start">With lessons</span>
+            <div className="flex items-center justify-between"><ProgressIcon className="w-10 h-10 text-accent" /><span className="chip">With lessons</span></div>
             <b className="font-display text-lg">Your progress, saved</b>
             <span className="text-sm text-ink2">Every lesson&apos;s numbers and slow-mo swings, Coach&apos;s notes, carry trends and homework videos — on your phone.</span>
           </div>
@@ -126,6 +131,16 @@ export default async function WelcomePage() {
             </Link>
           ))}
       </section>
+
+      {!isStudent && (
+        <a href="#book" className="block rounded-xl overflow-hidden border border-line max-w-xl self-center w-full">
+          <Image
+            src="/welcome/free-lesson-ad.jpg" width={1200} height={1213} sizes="(max-width: 640px) 100vw, 576px"
+            alt="Golf coaching lesson with Coach Jay at The Back Nine, North Arlington: free 60-minute coaching lesson for new students, with personal swing analysis, video feedback, a skill improvement plan and goal-based coaching."
+            className="w-full h-auto"
+          />
+        </a>
+      )}
 
       {!isStudent && !isCoach && (
         <section id="book" className="card flex flex-col gap-3 scroll-mt-4">
