@@ -13,15 +13,21 @@ const ICONS = {
   screen: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
   live: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></>,
   radar: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 12l6-6" /></>,
+  chat: <><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9h8M8 12h5" /></>,
+  ask: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6" /><circle cx="12" cy="17" r=".6" fill="currentColor" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" /></>,
 };
 
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: "side" | "tab" }) {
   const path = usePathname();
-  const isOn = (href: string, idx: number) => (idx === 0 ? path === href || path.startsWith(href + "/students") : path === href || path.startsWith(href + "/"));
+  // The deepest matching item wins, so "/community/ask" lights up Ask Coach rather than Clubhouse.
+  const matches = (href: string, idx: number) => (idx === 0 && href !== "/welcome" ? path === href || path.startsWith(href + "/students") : path === href || path.startsWith(href + "/"));
+  const best = items.reduce<string | null>((b, it, i) => (matches(it.href, i) && (!b || it.href.length > b.length) ? it.href : b), null);
+  const isOn = (href: string) => href === best;
   return (
     <>
-      {items.map((it, i) => {
-        const on = isOn(it.href, i);
+      {items.map((it) => {
+        const on = isOn(it.href);
         const cls = variant === "side"
           ? `flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-medium ${on ? "bg-accent-soft text-accent font-semibold" : "text-ink2 hover:bg-surface2"}`
           : `flex-1 flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium rounded-lg ${on ? "text-accent" : "text-ink3"}`;

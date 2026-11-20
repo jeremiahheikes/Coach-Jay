@@ -19,7 +19,7 @@ export default function LoginPage() {
         </div>
         {state.error && <p role="alert" className="text-sm text-bad">{state.error}</p>}
         <button className="btn btn-primary" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
-        <p className="text-sm text-ink2 text-center">New here? <Link className="text-accent font-semibold" href="/signup">Create an account</Link></p>
+        <p className="text-sm text-ink2 text-center">New here? <Link className="text-accent font-semibold" href="/signup">Join free</Link></p>
       </form>
     </AuthShell>
   );

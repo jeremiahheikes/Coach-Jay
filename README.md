@@ -20,6 +20,23 @@ assign video lessons; students open it on their phone (installable, no App Store
 
 Deliberately not in v1: booking, payments, chat, swing-video drawing tools.
 
+## The Clubhouse (v1.6)
+
+Free sign-up for anyone 18+. New members land on **/welcome** (meet Coach Jay, how the app works, free tips,
+latest posts, request a lesson, getting-started checklist) and get into **/community**:
+
+- **Feed** — posts with a photo or short swing clip, likes and replies; the coach can pin.
+- **Ask the Coach** — questions (with clips); a coach reply marked as the answer flips it to *Answered*.
+- **Chat** — channels (#announcements is coach-only, #general, #introductions, #range-sessions, #find-a-foursome), live over Supabase Realtime.
+- **Moderation** (coach) — reports, lesson requests, pause/restore a member's posting.
+
+Members accept house rules + confirm 18+ before entering. Roster students see everything they had before plus a
+Clubhouse tab; free members see Welcome · Clubhouse · Ask Coach · Profile. Mark any library lesson **Free tip** to
+put it on the Welcome page.
+
+Setup: run `supabase/migrations/0006_clubhouse.sql` in the SQL editor **before** deploying this code. Sign-up no
+longer offers a Coach option — promote a coach by hand: `update profiles set role = 'coach' where id = '<user id>';`
+
 ## Setup (about 20 minutes)
 
 ### 1. Supabase
